@@ -1,17 +1,8 @@
-from src.utils import is_package_installed, install_packages
-
-
-REQUIRED_PACKAGES = [
-    "PyQt6",
-    "piano_transcription_inference",
-    "numpy",
-    "scipy",
-    "pydub",
-]
+from src.utils import is_package_installed, install_packages, REQUIRED_PACKAGES
 
 
 def main():
-    missing = [pkg for pkg in REQUIRED_PACKAGES if not is_package_installed(pkg)]
+    missing = [install_name for import_name, install_name in REQUIRED_PACKAGES if not is_package_installed(import_name)]
     if not missing:
         print("所有依赖已安装。")
         return
