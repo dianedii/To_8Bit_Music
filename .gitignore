@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env/
+.venv/
+*.wav
+*.mp3
+!tests/fixtures/*.mp3
+!tests/fixtures/*.wav
+.superpowers/brainstorm/

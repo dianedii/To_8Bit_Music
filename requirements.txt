@@ -1,0 +1,5 @@
+PyQt6>=6.4.0
+piano_transcription_inference>=0.2
+numpy>=1.23.0
+scipy>=1.9.0
+pydub>=0.25.1
