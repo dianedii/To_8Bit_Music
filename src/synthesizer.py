@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.signal import butter, filtfilt
 from typing import List, Tuple
 
 
@@ -19,6 +20,13 @@ def synthesize(
     purity: 0 ~ 100，0=纯方波，100=轻微 vibrato + release
     volume: 0 ~ 100
     """
+    if duration <= 0:
+        raise ValueError("duration must be > 0")
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be > 0")
+    volume = max(0, min(100, volume))
+    purity = max(0, min(100, purity))
+
     num_samples = int(duration * sample_rate)
     audio = np.zeros(num_samples, dtype=np.float64)
 
@@ -27,6 +35,9 @@ def synthesize(
     release_time = (purity / 100.0) * 0.03  # 30ms 以内的 release
 
     for pitch, onset, offset, velocity in notes:
+        velocity = max(0, min(127, velocity))
+        if offset <= onset:
+            continue
         freq = midi_to_freq(pitch)
         start_idx = max(0, int(onset * sample_rate))
         end_idx = min(num_samples, int(offset * sample_rate))
@@ -43,6 +54,12 @@ def synthesize(
 
         wave = np.sign(np.sin(phase)).astype(np.float64)
 
+        # 抗混叠：对每个音符的方波应用低通滤波
+        nyquist = sample_rate / 2.0
+        cutoff = min(12000.0, nyquist * 0.95)
+        b, a = butter(2, cutoff / nyquist, btype='low')
+        wave = filtfilt(b, a, wave)
+
         # 应用包络：快速 attack + 可选 release
         env = np.ones_like(t)
         attack_samples = min(10, len(t))
@@ -54,6 +71,10 @@ def synthesize(
         note_amp = max_amp * (velocity / 127.0)
         audio[start_idx:end_idx] += wave * env * note_amp
 
-    # 软限幅防止破音
-    audio = np.tanh(audio)
+    # 先归一化到峰值 0.99，再硬限幅到 [-1.0, 1.0]
+    peak = np.max(np.abs(audio))
+    if peak > 1e-9:
+        audio = np.clip(audio / peak * 0.99, -1.0, 1.0)
+    else:
+        audio = np.clip(audio, -1.0, 1.0)
     return audio.astype(np.float32)
