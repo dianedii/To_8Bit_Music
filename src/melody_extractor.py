@@ -3,6 +3,11 @@ from typing import List, Tuple
 
 def _score_note(pitch: int, duration: float, velocity: int) -> float:
     """综合音符时长、力度和音高打分。"""
+    # 主旋律通常位于高音区，因此给音高一个适度的固定奖励，使其在时长和力度相近时优先被选中。
+    # Formula: duration * (velocity / 127.0) + (pitch / 127.0) * 1.5
+    # Rationale: duration is the primary factor; normalized velocity scales duration;
+    # pitch gets a fixed 1.5x bonus so higher notes win when duration/velocity are
+    # similar (since melodies tend to be in higher registers).
     return duration * (velocity / 127.0) + (pitch / 127.0) * 1.5
 
 
@@ -18,15 +23,19 @@ def extract_melody(
     if not notes:
         return []
 
+    notes = [
+        n for n in notes
+        if n[2] > n[1] and n[3] > 0
+    ]
+
+    if not notes:
+        return []
+
     notes = sorted(notes, key=lambda n: n[1])
     window_s = window_ms / 1000.0
     melody = []
     current_group = [notes[0]]
     current_end = notes[0][2]
-
-    def _pick_best(group):
-        best = max(group, key=lambda n: _score_note(n[0], n[2] - n[1], n[3]))
-        return best
 
     for note in notes[1:]:
         # 如果当前音符与当前组的时间窗重叠或紧邻，则加入同一组
@@ -34,9 +43,9 @@ def extract_melody(
             current_group.append(note)
             current_end = max(current_end, note[2])
         else:
-            melody.append(_pick_best(current_group))
+            melody.append(max(current_group, key=lambda n: _score_note(n[0], n[2] - n[1], n[3])))
             current_group = [note]
             current_end = note[2]
 
-    melody.append(_pick_best(current_group))
+    melody.append(max(current_group, key=lambda n: _score_note(n[0], n[2] - n[1], n[3])))
     return melody

@@ -20,3 +20,37 @@ def test_extract_melody_removes_overlapping():
     ]
     melody = extract_melody(notes, window_ms=50)
     assert len(melody) == 2
+
+
+def test_extract_melody_empty_returns_empty():
+    assert extract_melody([]) == []
+
+
+def test_extract_melody_single_note():
+    notes = [(60, 0.0, 0.5, 80)]
+    melody = extract_melody(notes)
+    assert melody == [(60, 0.0, 0.5, 80)]
+
+
+def test_extract_melody_filters_invalid_duration():
+    notes = [
+        (60, 0.0, 0.5, 80),
+        (64, 0.5, 0.5, 80),   # duration == 0 (offset == onset)
+        (67, 0.5, 0.4, 80),   # duration < 0 (offset < onset)
+        (72, 1.0, 1.5, 80),   # valid note in second window
+        (74, 1.5, 2.0, -10),  # velocity < 0
+    ]
+    melody = extract_melody(notes, window_ms=50)
+    assert len(melody) == 2
+    assert melody[0] == (60, 0.0, 0.5, 80)
+    assert melody[1] == (72, 1.0, 1.5, 80)  # only valid note in second window
+
+
+def test_extract_melody_preserves_full_tuple():
+    notes = [
+        (60, 0.0, 1.0, 80),
+        (72, 0.0, 0.8, 90),
+    ]
+    melody = extract_melody(notes, window_ms=50)
+    assert len(melody) == 1
+    assert melody[0] == (72, 0.0, 0.8, 90)
