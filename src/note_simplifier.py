@@ -38,7 +38,9 @@ def simplify_notes(
     while i < len(merged):
         window_notes = [merged[i]]
         j = i + 1
-        while j < len(merged) and (merged[j][1] - window_notes[-1][1]) <= ornament_window:
+        while j < len(merged) and (merged[j][1] - window_notes[0][1]) <= ornament_window:
+            if abs(merged[j][1] - window_notes[0][1]) <= 0.001 and merged[j][0] != window_notes[0][0]:
+                break
             window_notes.append(merged[j])
             j += 1
         if len(window_notes) > 1:
