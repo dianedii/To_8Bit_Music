@@ -1,7 +1,10 @@
 import importlib
 import subprocess
 import sys
+import wave
 from pathlib import Path
+
+import numpy as np
 
 
 MIRROR_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
@@ -72,3 +75,33 @@ def open_folder(path: Path) -> None:
         subprocess.run(["open", str(folder)], check=False)
     else:
         subprocess.run(["xdg-open", str(folder)], check=False)
+
+
+def export_audio(audio: np.ndarray, output_path: str, sample_rate: int = 44100) -> Path:
+    """导出音频为 WAV 或 MP3（依赖 pydub）。"""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 先写出临时 WAV
+    wav_path = output_path.with_suffix(".wav")
+    # 确保音频在 [-1, 1] 范围内并转为 16bit
+    clipped = np.clip(audio, -1.0, 1.0)
+    int16_audio = (clipped * 32767).astype(np.int16)
+
+    with wave.open(str(wav_path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(int16_audio.tobytes())
+
+    if output_path.suffix.lower() == ".mp3":
+        try:
+            from pydub import AudioSegment
+            segment = AudioSegment.from_wav(str(wav_path))
+            segment.export(str(output_path), format="mp3", bitrate="192k")
+            wav_path.unlink(missing_ok=True)
+        except Exception as e:
+            # MP3 导出失败时保留 WAV 并抛出提示
+            raise RuntimeError(f"MP3 导出失败，已保留 WAV: {wav_path}. 错误: {e}")
+
+    return output_path

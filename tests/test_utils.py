@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from src.utils import is_package_installed, get_output_path
+import numpy as np
+import tempfile
+
+from src.utils import is_package_installed, get_output_path, export_audio
 
 
 def test_is_package_installed_true():
@@ -27,3 +30,12 @@ def test_get_output_path_invalid_format():
         assert "不支持的输出格式" in str(e)
     else:
         raise AssertionError("Expected ValueError for unsupported format")
+
+
+def test_export_wav():
+    samples = np.sin(2 * np.pi * 440 * np.arange(4410) / 44100).astype(np.float32)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = Path(tmpdir) / "test.wav"
+        export_audio(samples, str(out_path), sample_rate=44100)
+        assert out_path.exists()
+        assert out_path.stat().st_size > 0
