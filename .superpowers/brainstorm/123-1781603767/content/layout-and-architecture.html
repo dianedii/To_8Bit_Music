@@ -1,0 +1,105 @@
+<h2>FC 8-bit 转换器：GUI 布局与整体架构</h2>
+<p class="subtitle">请确认界面布局和数据流是否符合你的预期</p>
+
+<div class="section">
+  <h3>GUI 布局</h3>
+  <div class="mockup">
+    <div class="mockup-header">FC 8-bit 转换器</div>
+    <div class="mockup-body" style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <input class="mock-input" value="C:\\Music\\xxx.mp3" readonly style="flex:1;">
+        <button class="mock-button">选择文件</button>
+      </div>
+      <div>
+        <div class="label">复古纯度</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span>纯 FC 方波</span>
+          <div class="placeholder" style="flex:1; height: 8px;"></div>
+          <span>轻微润色</span>
+        </div>
+      </div>
+      <div>
+        <div class="label">音符简化强度</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span>保留原样</span>
+          <div class="placeholder" style="flex:1; height: 8px;"></div>
+          <span>极致简化</span>
+        </div>
+      </div>
+      <div>
+        <div class="label">整体音量</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span>轻</span>
+          <div class="placeholder" style="flex:1; height: 8px;"></div>
+          <span>响</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <div class="label">输出格式</div>
+        <select class="mock-input" style="width: 120px;">
+          <option>MP3</option>
+          <option>WAV</option>
+        </select>
+      </div>
+      <button class="mock-button" style="align-self: flex-start;">开始转换</button>
+      <div class="label">进度</div>
+      <div class="placeholder" style="height: 12px;"></div>
+      <div class="subtitle">状态：等待选择文件...</div>
+      <div style="display: flex; gap: 10px;">
+        <button class="mock-button" disabled>打开文件所在文件夹</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>全链路数据流</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="placeholder" style="width: 120px; text-align: center; padding: 10px;">MP3 输入</div>
+        <span>→</span>
+        <div class="placeholder" style="width: 160px; text-align: center; padding: 10px;">piano_transcription_inference</div>
+        <span>→</span>
+        <div class="placeholder" style="width: 120px; text-align: center; padding: 10px;">MIDI 音符</div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; margin-left: 60px;">
+        <div class="placeholder" style="width: 140px; text-align: center; padding: 10px;">主旋律提取</div>
+        <span>→</span>
+        <div class="placeholder" style="width: 140px; text-align: center; padding: 10px;">音符简化</div>
+        <span>→</span>
+        <div class="placeholder" style="width: 140px; text-align: center; padding: 10px;">FC 方波合成</div>
+        <span>→</span>
+        <div class="placeholder" style="width: 120px; text-align: center; padding: 10px;">MP3/WAV</div>
+      </div>
+      <div class="subtitle" style="margin-top: 10px;">全程不保留原音频采样，从零生成电子波形</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>关键模块</h3>
+  <div class="options">
+    <div class="option" data-choice="ok" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>整体方向 OK</h3>
+        <p>GUI 布局和全链路架构符合预期，继续细化参数与合成细节。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="adjust-ui" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>需要调整界面</h3>
+        <p>控件布局、参数名称或显示信息需要修改。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="adjust-flow" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>需要调整数据流</h3>
+        <p>转录、提取、简化、合成的顺序或方式需要修改。</p>
+      </div>
+    </div>
+  </div>
+</div>
