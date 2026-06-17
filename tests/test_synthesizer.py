@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from src.synthesizer import synthesize
 
@@ -46,3 +47,29 @@ def test_synthesize_purity_applies_vibrato():
     audio_pure = synthesize(notes, duration=0.5, sample_rate=44100, purity=0)
     audio_impure = synthesize(notes, duration=0.5, sample_rate=44100, purity=100)
     assert not np.allclose(audio_pure, audio_impure)
+
+
+def test_invalid_duration_raises():
+    with pytest.raises(ValueError):
+        synthesize([], duration=0, sample_rate=44100)
+
+
+def test_invalid_sample_rate_raises():
+    with pytest.raises(ValueError):
+        synthesize([], duration=1.0, sample_rate=0)
+
+
+def test_volume_clamping():
+    notes = [(60, 0.0, 0.1, 80)]
+    audio_clamped = synthesize(notes, duration=0.2, sample_rate=44100, volume=150)
+    audio_max = synthesize(notes, duration=0.2, sample_rate=44100, volume=100)
+    assert np.allclose(audio_clamped, audio_max)
+
+
+def test_overlapping_notes_no_clip():
+    notes = [
+        (60, 0.0, 0.2, 127),
+        (60, 0.05, 0.2, 127),
+    ]
+    audio = synthesize(notes, duration=0.2, sample_rate=44100)
+    assert np.max(np.abs(audio)) <= 1.0

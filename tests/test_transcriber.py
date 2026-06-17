@@ -1,5 +1,4 @@
 from unittest.mock import patch, MagicMock
-import sys
 
 def test_transcribe_to_notes_format():
     # Mock piano_transcription_inference in sys.modules BEFORE importing src.transcriber

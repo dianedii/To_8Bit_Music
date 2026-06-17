@@ -105,3 +105,12 @@ def export_audio(audio: np.ndarray, output_path: str, sample_rate: int = 44100) 
             raise RuntimeError(f"MP3 导出失败，已保留 WAV: {wav_path}. 错误: {e}")
 
     return output_path
+
+
+def check_all_dependencies() -> list[str]:
+    """返回缺失的依赖包名列表。"""
+    missing = []
+    for import_name, install_name in REQUIRED_PACKAGES:
+        if not is_package_installed(import_name):
+            missing.append(install_name)
+    return missing
