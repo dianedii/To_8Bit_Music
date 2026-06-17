@@ -23,6 +23,12 @@ def test_get_output_path_wav():
     assert get_output_path("input.mp3", "wav") == Path("input.wav")
 
 
+def test_get_output_path_avoid_overwrite():
+    # 当输入输出格式相同时，应添加 _8bit 后缀避免覆盖原文件
+    assert get_output_path("input.mp3", "mp3") == Path("input_8bit.mp3")
+    assert get_output_path("input.wav", "wav") == Path("input_8bit.wav")
+
+
 def test_get_output_path_invalid_format():
     try:
         get_output_path("input.wav", "ogg")

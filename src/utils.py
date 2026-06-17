@@ -61,6 +61,10 @@ def get_output_path(input_path: str, output_format: str) -> Path:
         suffix = ".mp3"
     else:
         raise ValueError(f"不支持的输出格式: {output_format}")
+
+    # 避免输出文件与输入文件同名导致覆盖
+    if p.suffix.lower() == suffix:
+        return p.with_stem(f"{p.stem}_8bit").with_suffix(suffix)
     return p.with_suffix(suffix)
 
 

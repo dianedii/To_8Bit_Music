@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+import numpy as np
 
 def test_transcribe_to_notes_format():
     # Mock piano_transcription_inference in sys.modules BEFORE importing src.transcriber
@@ -18,7 +19,9 @@ def test_transcribe_to_notes_format():
     with patch.dict('sys.modules', {'piano_transcription_inference': mock_piano_transcription_inference}):
         # Import inside the mock context so the try/except import resolves to the mock
         from src.transcriber import transcribe_to_notes
-        with patch('src.transcriber.Path.exists', return_value=True):
+        with patch('src.transcriber.Path.exists', return_value=True), \
+             patch('src.transcriber._download_checkpoint'), \
+             patch('src.transcriber.librosa.load', return_value=(np.zeros(16000, dtype=np.float32), 16000)):
             notes = transcribe_to_notes("dummy.mp3")
 
     assert len(notes) == 2
