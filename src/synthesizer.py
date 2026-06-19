@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.signal import butter, filtfilt
 from typing import List, Tuple
 
 
@@ -30,7 +29,7 @@ def synthesize(
     num_samples = int(duration * sample_rate)
     audio = np.zeros(num_samples, dtype=np.float64)
 
-    max_amp = (volume / 100.0) * 0.45  # 留 headroom 防止破音
+    max_amp = (volume / 100.0) * 0.6  # 适度响度，同时保留 headroom
     vibrato_depth = (purity / 100.0) * 0.5  # 半音范围内的轻微颤音
     release_time = (purity / 100.0) * 0.03  # 30ms 以内的 release
 
@@ -52,13 +51,8 @@ def synthesize(
         else:
             phase = 2 * np.pi * freq * t
 
+        # 标准 50% 占空比方波，保留纯正 FC 芯片质感
         wave = np.sign(np.sin(phase)).astype(np.float64)
-
-        # 抗混叠：对每个音符的方波应用低通滤波
-        nyquist = sample_rate / 2.0
-        cutoff = min(12000.0, nyquist * 0.95)
-        b, a = butter(2, cutoff / nyquist, btype='low')
-        wave = filtfilt(b, a, wave)
 
         # 应用包络：快速 attack + 可选 release
         env = np.ones_like(t)
@@ -71,10 +65,9 @@ def synthesize(
         note_amp = max_amp * (velocity / 127.0)
         audio[start_idx:end_idx] += wave * env * note_amp
 
-    # 先归一化到峰值 0.99，再硬限幅到 [-1.0, 1.0]
+    # 软限幅 + 峰值归一化，确保无破音且整体响度稳定
     peak = np.max(np.abs(audio))
     if peak > 1e-9:
-        audio = np.clip(audio / peak * 0.99, -1.0, 1.0)
-    else:
-        audio = np.clip(audio, -1.0, 1.0)
+        audio = np.tanh(audio / peak * 0.99) * peak / 0.99
+    audio = np.clip(audio, -1.0, 1.0)
     return audio.astype(np.float32)

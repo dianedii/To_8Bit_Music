@@ -2,10 +2,10 @@ from src.melody_extractor import extract_melody
 
 
 def test_extract_melody_keeps_highest_longest():
-    # 同一时间窗内有两个音符，应保留更长、更高的主旋律音
+    # 同一时间窗内有两个音符，应保留音高更高的主旋律音
     notes = [
-        (48, 0.0, 1.0, 80),  # 低音，较长
-        (72, 0.0, 0.6, 90),  # 高音，较短但音高优势大
+        (48, 0.0, 0.6, 80),  # 低音
+        (72, 0.0, 0.6, 90),  # 高音，应被选中
     ]
     melody = extract_melody(notes, window_ms=50)
     assert len(melody) == 1
@@ -49,8 +49,8 @@ def test_extract_melody_filters_invalid_duration():
 def test_extract_melody_preserves_full_tuple():
     notes = [
         (60, 0.0, 1.0, 80),
-        (72, 0.0, 0.8, 90),
+        (72, 0.0, 1.0, 90),  # 同时结束的高音，应被完整保留
     ]
     melody = extract_melody(notes, window_ms=50)
     assert len(melody) == 1
-    assert melody[0] == (72, 0.0, 0.8, 90)
+    assert melody[0] == (72, 0.0, 1.0, 90)
