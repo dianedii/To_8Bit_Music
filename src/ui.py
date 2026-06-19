@@ -16,7 +16,7 @@ from src.utils import open_folder
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("FC 8-bit 芯片音乐转换器")
+        self.setWindowTitle("8-bit 芯片音乐转换器")
         self.setMinimumWidth(480)
 
         self.input_path = ""
@@ -77,6 +77,16 @@ class MainWindow(QMainWindow):
         volume_layout.addWidget(QLabel("响"))
         layout.addLayout(volume_layout)
 
+        # 转换模式
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(QLabel("转换风格"))
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["流行 8-bit", "纯正 FC"])
+        self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        mode_layout.addWidget(self.mode_combo)
+        mode_layout.addStretch()
+        layout.addLayout(mode_layout)
+
         # 输出格式
         format_layout = QHBoxLayout()
         format_layout.addWidget(QLabel("输出格式"))
@@ -109,6 +119,12 @@ class MainWindow(QMainWindow):
 
         self.output_path = ""
 
+    def _on_mode_changed(self, text: str):
+        is_fc = text == "纯正 FC"
+        self.purity_slider.setEnabled(is_fc)
+        self.simplify_slider.setEnabled(is_fc)
+        self.volume_slider.setEnabled(is_fc)
+
     def _select_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "选择 MP3 文件", "", "MP3 文件 (*.mp3)"
@@ -127,12 +143,15 @@ class MainWindow(QMainWindow):
         self.open_folder_btn.setEnabled(False)
         self.progress_bar.setValue(0)
 
+        mode = "pop" if self.mode_combo.currentText() == "流行 8-bit" else "fc"
+
         self.worker = ConvertWorker(
             input_path=self.input_path,
             purity=self.purity_slider.value(),
             simplification=self.simplify_slider.value(),
             volume=self.volume_slider.value(),
             output_format=self.format_combo.currentText(),
+            mode=mode,
         )
         self.worker.progress.connect(self.progress_bar.setValue)
         self.worker.status.connect(self.status_label.setText)

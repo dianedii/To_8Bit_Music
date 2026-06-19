@@ -7,6 +7,19 @@ def midi_to_freq(midi_note: int) -> float:
     return 440.0 * (2.0 ** ((midi_note - 69) / 12.0))
 
 
+def _bandlimited_square(phase: np.ndarray, freq: float, sample_rate: int) -> np.ndarray:
+    """
+    带限方波：根据基频限制谐波数量，既保留方波电子感，
+    又避免高频谐波过多导致刺耳/过亮。
+    """
+    max_harm = int(np.floor((sample_rate / 2.5) / freq))
+    max_harm = max(1, min(max_harm, 40))
+    wave = np.zeros_like(phase)
+    for n in range(1, max_harm + 1, 2):
+        wave += (4.0 / (np.pi * n)) * np.sin(n * phase)
+    return np.clip(wave, -1.0, 1.0)
+
+
 def synthesize(
     notes: List[Tuple[int, float, float, int]],
     duration: float,
@@ -15,7 +28,7 @@ def synthesize(
     volume: int = 80,
 ) -> np.ndarray:
     """
-    将音符序列合成为 FC 方波音频。
+    将音符序列合成为 8-bit 风格音频。
     purity: 0 ~ 100，0=纯方波，100=轻微 vibrato + release
     volume: 0 ~ 100
     """
@@ -29,7 +42,7 @@ def synthesize(
     num_samples = int(duration * sample_rate)
     audio = np.zeros(num_samples, dtype=np.float64)
 
-    max_amp = (volume / 100.0) * 0.6  # 适度响度，同时保留 headroom
+    base_amp = (volume / 100.0) * 0.5  # 单音符基础振幅
     vibrato_depth = (purity / 100.0) * 0.5  # 半音范围内的轻微颤音
     release_time = (purity / 100.0) * 0.03  # 30ms 以内的 release
 
@@ -51,8 +64,8 @@ def synthesize(
         else:
             phase = 2 * np.pi * freq * t
 
-        # 标准 50% 占空比方波，保留纯正 FC 芯片质感
-        wave = np.sign(np.sin(phase)).astype(np.float64)
+        # 使用带限方波，降低刺耳高频
+        wave = _bandlimited_square(phase, freq, sample_rate)
 
         # 应用包络：快速 attack + 可选 release
         env = np.ones_like(t)
@@ -62,12 +75,12 @@ def synthesize(
             release_samples = min(int(release_time * sample_rate), len(t))
             env[-release_samples:] = np.linspace(1.0, 0.0, release_samples)
 
-        note_amp = max_amp * (velocity / 127.0)
+        note_amp = base_amp * (velocity / 127.0)
         audio[start_idx:end_idx] += wave * env * note_amp
 
-    # 软限幅 + 峰值归一化，确保无破音且整体响度稳定
+    # 峰值归一化到 0.95，保证响度与商业音频接近
     peak = np.max(np.abs(audio))
     if peak > 1e-9:
-        audio = np.tanh(audio / peak * 0.99) * peak / 0.99
+        audio = audio / peak * 0.95
     audio = np.clip(audio, -1.0, 1.0)
     return audio.astype(np.float32)

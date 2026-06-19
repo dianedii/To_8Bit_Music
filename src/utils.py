@@ -82,7 +82,7 @@ def open_folder(path: Path) -> None:
 
 
 def export_audio(audio: np.ndarray, output_path: str, sample_rate: int = 44100) -> Path:
-    """导出音频为 WAV 或 MP3（依赖 pydub）。"""
+    """导出音频为 WAV 或 MP3（依赖 pydub）。支持单声道或立体声输入。"""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -90,10 +90,17 @@ def export_audio(audio: np.ndarray, output_path: str, sample_rate: int = 44100) 
     wav_path = output_path.with_suffix(".wav")
     # 确保音频在 [-1, 1] 范围内并转为 16bit
     clipped = np.clip(audio, -1.0, 1.0)
-    int16_audio = (clipped * 32767).astype(np.int16)
+
+    if clipped.ndim == 1:
+        n_channels = 1
+        int16_audio = (clipped * 32767).astype(np.int16)
+    else:
+        n_channels = clipped.shape[0]
+        # shape (channels, samples) -> (samples, channels) 并转为 int16
+        int16_audio = (np.transpose(clipped) * 32767).astype(np.int16)
 
     with wave.open(str(wav_path), "wb") as wf:
-        wf.setnchannels(1)
+        wf.setnchannels(n_channels)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
         wf.writeframes(int16_audio.tobytes())

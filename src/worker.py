@@ -7,6 +7,7 @@ from src.transcriber import transcribe_to_notes
 from src.melody_extractor import extract_melody
 from src.note_simplifier import simplify_notes
 from src.synthesizer import synthesize
+from src.pop_synthesizer import synthesize_pop_chip
 from src.utils import export_audio, get_output_path
 
 
@@ -23,6 +24,7 @@ class ConvertWorker(QThread):
         simplification: int,
         volume: int,
         output_format: str,
+        mode: str = "fc",
     ):
         super().__init__()
         self.input_path = input_path
@@ -30,6 +32,17 @@ class ConvertWorker(QThread):
         self.simplification = simplification
         self.volume = volume
         self.output_format = output_format
+        self.mode = mode
+
+    def _load_audio_numpy(self, audio_segment):
+        """将 pydub AudioSegment 转为 numpy 数组。"""
+        import numpy as np
+        samples = np.array(audio_segment.get_array_of_samples())
+        if audio_segment.channels == 2:
+            samples = samples.reshape(-1, 2)
+            samples = np.transpose(samples)
+        max_val = float(2 ** (audio_segment.sample_width * 8 - 1))
+        return samples.astype(np.float64) / max_val
 
     def run(self):
         try:
@@ -43,6 +56,29 @@ class ConvertWorker(QThread):
                 self.finished_error.emit("曲目时长超过 10 分钟限制。")
                 return
 
+            output_path = get_output_path(self.input_path, self.output_format)
+
+            if self.mode == "pop":
+                self.status.emit("正在合成流行 8-bit 音频...")
+                self.progress.emit(40)
+                audio_np = self._load_audio_numpy(audio)
+                audio_data = synthesize_pop_chip(
+                    audio_np,
+                    sample_rate=audio.frame_rate,
+                    waveform="square",
+                    chip_mix=0.75,
+                    n_voices=6,
+                )
+
+                self.status.emit("正在导出文件...")
+                self.progress.emit(95)
+                export_audio(audio_data, str(output_path), sample_rate=audio.frame_rate)
+
+                self.progress.emit(100)
+                self.finished_success.emit(str(output_path))
+                return
+
+            # 纯正 FC 模式：分离 → 识别 → 重合成
             self.status.emit("正在转录音符...")
             self.progress.emit(20)
             notes = transcribe_to_notes(self.input_path)
@@ -55,9 +91,8 @@ class ConvertWorker(QThread):
             self.progress.emit(70)
             simplified = simplify_notes(melody, strength=self.simplification)
 
-            self.status.emit("正在合成 8-bit 音频...")
+            self.status.emit("正在合成 FC 8-bit 音频...")
             self.progress.emit(85)
-            output_path = get_output_path(self.input_path, self.output_format)
             audio_data = synthesize(
                 simplified,
                 duration=duration_sec + 0.5,
