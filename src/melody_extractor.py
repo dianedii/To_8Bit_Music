@@ -54,9 +54,9 @@ def extract_melody(
     current_start: float | None = None
     melody: List[Tuple[int, float, float, int]] = []
 
-    switch_threshold = 0.05
-    # 单个旋律音最长持续 1.2 秒，超过强制重新评估，避免长伴奏音主导
-    max_melody_note_duration = 1.2
+    switch_threshold = 0.02
+    # 单个旋律音最长持续 0.5 秒，超过强制重新评估，避免旋律音拖太长
+    max_melody_note_duration = 0.5
 
     def _pick_best(candidates: List[Tuple[int, float, float, int]]) -> Tuple[int, float, float, int]:
         return max(
@@ -90,14 +90,13 @@ def extract_melody(
                 )
                 best_score = _score_note(best[0], best[2] - best[1], best[3])
                 duration_now = time - current_start
-                # 超过最大旋律音长，强制结束当前音并重新选择
+                # 当前旋律音持续过长，强制结束并重新选择，避免长音拖尾
                 force_switch = duration_now > max_melody_note_duration
                 score_better = (
                     best_score > current_score * (1 + switch_threshold)
                     and best[0] != current_note[0]
                 )
                 if force_switch or score_better:
-                    # 截断到最大允许时长
                     end_time = min(time, current_start + max_melody_note_duration)
                     melody.append((current_note[0], current_start, end_time, current_note[3]))
                     current_note = best

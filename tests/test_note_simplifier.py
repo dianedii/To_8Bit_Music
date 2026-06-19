@@ -3,23 +3,23 @@ from src.note_simplifier import simplify_notes
 
 def test_filter_short_notes():
     notes = [
-        (60, 0.0, 0.05, 80),   # 碎音，应被过滤
+        (60, 0.0, 0.005, 80),  # 极短碎音，应被过滤
         (60, 0.1, 0.6, 80),    # 正常音符
     ]
-    simplified = simplify_notes(notes, strength=50)
+    simplified = simplify_notes(notes, strength=100)
     assert len(simplified) == 1
     assert simplified[0] == (60, 0.1, 0.6, 80)
 
 
 def test_merge_same_pitch():
     notes = [
-        (60, 0.0, 0.4, 80),
-        (60, 0.42, 0.8, 80),  # 间隔很小，应合并
+        (60, 0.0, 0.25, 80),
+        (60, 0.252, 0.5, 80),  # 间隔极小，应合并
     ]
-    simplified = simplify_notes(notes, strength=50)
+    simplified = simplify_notes(notes, strength=100)
     assert len(simplified) == 1
-    simplified[0][0] == 60
-    assert abs(simplified[0][2] - 0.8) < 0.01
+    assert simplified[0][0] == 60
+    assert abs(simplified[0][2] - 0.5) < 0.01
 
 
 def test_remove_ornament():
@@ -50,8 +50,8 @@ def test_density_limit():
     for i in range(20):
         notes.append((60 + i % 2, i * 0.02, i * 0.02 + 0.1, 80))
     simplified = simplify_notes(notes, strength=50)
-    # 20 notes within 0.5s, max_notes_per_beat at strength=50 is 5
-    assert len(simplified) <= 5
+    # 20 notes within 0.5s, max_notes_per_beat at strength=50 is 9
+    assert len(simplified) <= 9
 
 
 def test_empty_input():

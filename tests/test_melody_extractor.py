@@ -48,9 +48,9 @@ def test_extract_melody_filters_invalid_duration():
 
 def test_extract_melody_preserves_full_tuple():
     notes = [
-        (60, 0.0, 1.0, 80),
-        (72, 0.0, 1.0, 90),  # 同时结束的高音，应被完整保留
+        (60, 0.0, 0.4, 80),
+        (72, 0.0, 0.4, 90),  # 同时结束的高音，应被完整保留
     ]
     melody = extract_melody(notes, window_ms=50)
     assert len(melody) == 1
-    assert melody[0] == (72, 0.0, 1.0, 90)
+    assert melody[0] == (72, 0.0, 0.4, 90)

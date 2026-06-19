@@ -12,21 +12,27 @@ def simplify_notes(
     if not notes:
         return []
 
-    # 根据强度计算阈值
-    min_duration = 0.02 + (1 - strength / 100.0) * 0.08  # 50 -> 0.06s
-    merge_gap = 0.01 + (1 - strength / 100.0) * 0.04     # 50 -> 0.03s
-    ornament_window = 0.05 + (1 - strength / 100.0) * 0.1  # 50 -> 0.10s
-    max_notes_per_beat = max(2, int(8 - (strength / 100.0) * 6))  # 50 -> 5
+    # 根据强度计算阈值；默认值更宽松，保留更多音符以跟上原曲速度
+    min_duration = 0.015 + (1 - strength / 100.0) * 0.035  # 50 -> 0.0325s
+    merge_gap = 0.005 + (1 - strength / 100.0) * 0.01      # 50 -> 0.01s, 100 -> 0.005s
+    ornament_window = 0.03 + (1 - strength / 100.0) * 0.07  # 50 -> 0.065s
+    max_notes_per_beat = max(4, int(12 - (strength / 100.0) * 6))  # 50 -> 9
 
     notes = sorted(notes, key=lambda n: n[1])
 
     # 1. 过滤碎音
     filtered = [n for n in notes if (n[2] - n[1]) >= min_duration]
 
-    # 2. 合并相邻同音
+    # 2. 合并相邻同音，但限制合并后总时长不超过 0.5s，避免旋律音拖得太长
     merged = []
+    max_merged_duration = 0.5
     for note in filtered:
-        if merged and note[0] == merged[-1][0] and (note[1] - merged[-1][2]) <= merge_gap:
+        if (
+            merged
+            and note[0] == merged[-1][0]
+            and (note[1] - merged[-1][2]) <= merge_gap
+            and (max(note[2], merged[-1][2]) - merged[-1][1]) <= max_merged_duration
+        ):
             prev = merged[-1]
             merged[-1] = (prev[0], prev[1], max(prev[2], note[2]), max(prev[3], note[3]))
         else:
