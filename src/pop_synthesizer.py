@@ -123,26 +123,6 @@ def _bandlimited_waveform(phase: np.ndarray, freq: float, sample_rate: int, wave
     return np.clip(wave, -1.0, 1.0)
 
 
-def _match_peaks(prev_peaks, candidates, max_dist: float = 0.35):
-    """将当前帧候选峰值与上一帧按频率最近邻匹配。"""
-    matched = [None] * len(prev_peaks)
-    used = set()
-    for i, (pf, pa) in enumerate(prev_peaks):
-        best_j = None
-        best_dist = float('inf')
-        for j, (cf, ca) in enumerate(candidates):
-            if j in used or cf <= 0:
-                continue
-            dist = abs(np.log(cf / pf)) if pf > 0 else abs(cf - pf)
-            if dist < best_dist:
-                best_dist = dist
-                best_j = j
-        if best_j is not None and best_dist < max_dist:
-            matched[i] = candidates[best_j]
-            used.add(best_j)
-    return matched, used
-
-
 def _extract_stable_pitches(
     segment: np.ndarray,
     sample_rate: int,
@@ -260,6 +240,8 @@ def synthesize_pop_chip(
     chip_mix: float = 0.75,
     n_voices: int = 4,
     hop_length: int = 512,
+    min_note_duration: float = 0.05,
+    pitch_stabilize: float = 1.0,
 ) -> np.ndarray:
     """
     基于原音频的流行 8-bit 合成。
@@ -271,107 +253,52 @@ def synthesize_pop_chip(
         chip_mix: 合成器层混合比例（0~1）
         n_voices: 同时跟踪的声部数
         hop_length: STFT 帧移
+        min_note_duration: 最小音符时长（秒）
+        pitch_stabilize: 音高稳定因子（预留，暂未使用）
 
     Returns:
-        合成后的单声道 float32 音频
+        合成后的立体声 float32 音频，shape (2, N)
     """
     mono = _audio_to_mono_float(audio)
     if len(mono) == 0:
-        return np.zeros(0, dtype=np.float32)
+        return np.zeros((2, 0), dtype=np.float32)
 
-    stft = librosa.stft(mono, hop_length=hop_length)
-    mag = np.abs(stft)
-    freqs = librosa.fft_frequencies(sr=sample_rate)
-    n_frames = mag.shape[1]
+    onsets = _detect_onsets(mono, sample_rate, hop_length=hop_length)
+    segments = _segment_audio(mono, sample_rate, onsets, min_note_duration=min_note_duration)
 
-    # 每帧提取候选峰值并跟踪声部
-    tracked = []
-    for t in range(n_frames):
-        frame = mag[:, t]
-        peaks, _ = signal.find_peaks(frame, height=np.max(frame) * 0.015, distance=2)
-        candidates = []
-        if len(peaks) > 0:
-            for p in peaks[np.argsort(frame[peaks])[::-1]]:
-                if freqs[p] > 40.0:
-                    candidates.append((float(freqs[p]), float(frame[p])))
-        candidates = candidates[:n_voices * 3]
+    raw_notes = []
+    for start, end in segments:
+        segment = mono[start:end]
+        pitches = _extract_stable_pitches(segment, sample_rate, n_voices=n_voices, hop_length=hop_length)
+        onset_time = start / sample_rate
+        offset_time = end / sample_rate
+        for midi, velocity in pitches:
+            raw_notes.append((midi, onset_time, offset_time, velocity))
 
-        if t == 0:
-            init = candidates[:n_voices]
-            while len(init) < n_voices:
-                init.append((0.0, 0.0))
-            tracked.append(init)
-        else:
-            prev = tracked[t - 1]
-            matched, used = _match_peaks(prev, candidates, max_dist=0.35)
-            filled = []
-            for i in range(n_voices):
-                if matched[i] is not None:
-                    filled.append(matched[i])
-                else:
-                    appended = False
-                    for j, c in enumerate(candidates):
-                        if j not in used:
-                            filled.append(c)
-                            used.add(j)
-                            appended = True
-                            break
-                    if not appended:
-                        pf, pa = prev[i]
-                        filled.append((pf, pa * 0.7))
-            tracked.append(filled)
+    notes = _merge_consecutive_notes(raw_notes, gap_threshold=min_note_duration)
 
-    # 准备每个声部的频率/振幅序列
-    voice_data = []
-    for i in range(n_voices):
-        vf = np.array([tracked[t][i][0] for t in range(n_frames)])
-        va = np.array([tracked[t][i][1] for t in range(n_frames)])
-        # 填补零频率
-        for t in range(1, n_frames):
-            if vf[t] <= 0 and vf[t - 1] > 0:
-                vf[t] = vf[t - 1]
-                va[t] = va[t] * 0.5
-        # 中值滤波平滑
-        if n_frames >= 5:
-            vf = signal.medfilt(vf, kernel_size=5)
-            va = signal.medfilt(va, kernel_size=5)
-        voice_data.append((vf, va))
+    duration = len(mono) / sample_rate
+    synth = _synthesize_events(notes, duration, sample_rate, waveform=waveform)
 
-    times = librosa.times_like(mag, sr=sample_rate, hop_length=hop_length)
-    t_full = np.arange(len(mono)) / sample_rate
-
-    synth = np.zeros(len(mono), dtype=np.float64)
-    global_max_amp = max(1e-9, max(np.max(va) for _, va in voice_data))
-
-    for i in range(n_voices):
-        vf, va = voice_data[i]
-        f_interp = np.interp(t_full, times, vf)
-        a_interp = np.interp(t_full, times, va)
-        f_interp = np.clip(f_interp, 20.0, 8000.0)
-        a_interp = a_interp / global_max_amp
-        fixed_phase_offset = (i * 2.0944) % (2 * np.pi)
-        phase = 2.0 * np.pi * np.cumsum(f_interp) / sample_rate + fixed_phase_offset
-        wave = _bandlimited_waveform(phase, np.median(f_interp), sample_rate, waveform)
-        synth += wave * a_interp
-
+    # Peak normalize synth layer
     peak = np.max(np.abs(synth))
     if peak > 1e-9:
         synth = synth / peak * 0.98
 
-    # 用原音频包络调制，保留动态；对包络做开立方，既提升安静段落响度又保留层次感
+    # RMS envelope modulation
     envelope = _rms_envelope(mono, floor=0.50)
     envelope = np.cbrt(envelope)
-    synth = synth * envelope
+    if len(envelope) == len(synth):
+        synth = synth * envelope
 
-    # 混合原音频与芯片合成层
+    # Mix original audio with chip synth layer
     out = (1.0 - chip_mix) * mono + chip_mix * synth
     out = out.astype(np.float64)
 
-    # 柔和压缩 + 峰值归一化，让响度接近商业参考
+    # Gentle compression + peak normalization
     out = _gentle_compress(out, threshold=0.55, ratio=2.5)
     peak = np.max(np.abs(out))
     if peak > 1e-9:
         out = out / peak * 0.98
     out = np.clip(out, -1.0, 1.0).astype(np.float32)
-    # 输出立体声（左右相同），与参考 8.mp3 一致
     return np.stack([out, out], axis=0)

@@ -1,7 +1,14 @@
 import numpy as np
 import pytest
 
-from src.pop_synthesizer import _detect_onsets, _segment_audio, _extract_stable_pitches
+from src.pop_synthesizer import (
+    _detect_onsets,
+    _segment_audio,
+    _extract_stable_pitches,
+    _merge_consecutive_notes,
+    _synthesize_events,
+    synthesize_pop_chip,
+)
 
 
 def generate_click_tone(freq, duration, sr, onset_times):
@@ -100,7 +107,29 @@ def test_extract_stable_pitches_two_tones():
     assert any(abs(m - 76) <= 1 for m in midis)
 
 
-from src.pop_synthesizer import _merge_consecutive_notes, _synthesize_events
+def test_synthesize_pop_chip_outputs_stable_chip():
+    sr = 44100
+    duration = 1.0
+    t = np.arange(int(duration * sr)) / sr
+    audio = np.zeros_like(t)
+    for start, freq in [(0.0, 440.0), (0.3, 523.25), (0.6, 659.25)]:
+        mask = (t >= start) & (t < start + 0.25)
+        env = np.exp(-(t[mask] - start) / 0.05)
+        audio[mask] += np.sin(2 * np.pi * freq * t[mask]) * env
+
+    out = synthesize_pop_chip(
+        audio,
+        sample_rate=sr,
+        waveform='square',
+        chip_mix=1.0,
+        n_voices=4,
+        hop_length=512,
+    )
+    assert out.ndim == 2
+    assert out.shape[0] == 2
+    assert out.shape[1] == len(audio)
+    assert out.dtype == np.float32
+    assert np.max(np.abs(out)) <= 1.0
 
 
 def test_merge_consecutive_notes_joins_same_pitch():
