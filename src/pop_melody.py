@@ -70,9 +70,11 @@ def _pyin_to_notes(
 
 def _split_candidate_lines(
     notes: list[tuple[int, float, float, int]],
-    gap_threshold: float = 0.05,
 ) -> list[list[tuple[int, float, float, int]]]:
-    """将重叠音符拆分为不重叠的连续单音候选线。"""
+    """将音符事件拆分为若干条不重叠的连续单音候选线。
+
+    每条线内的音符按时间顺序排列，且任意相邻音符不重叠。
+    """
     if not notes:
         return []
 
@@ -85,7 +87,7 @@ def _split_candidate_lines(
         best_gap = float('inf')
         for line in lines:
             last = line[-1]
-            if last[2] <= onset + gap_threshold:
+            if last[2] <= onset:
                 gap = onset - last[2]
                 if gap < best_gap:
                     best_gap = gap

@@ -40,9 +40,33 @@ def test_split_candidate_lines_separates_overlapping():
         (62, 0.6, 1.0, 100),  # 低音后续
         (74, 0.6, 1.0, 100),  # 高音后续
     ]
-    lines = _split_candidate_lines(notes, gap_threshold=0.05)
+    lines = _split_candidate_lines(notes)
     assert len(lines) == 2
     pitches_a = [n[0] for n in lines[0]]
     pitches_b = [n[0] for n in lines[1]]
     assert set(pitches_a) == {60, 62}
     assert set(pitches_b) == {72, 74}
+
+
+def test_split_candidate_lines_empty():
+    assert _split_candidate_lines([]) == []
+
+
+def test_split_candidate_lines_real_overlap():
+    # 真正的重叠：低音持续到 0.7，高音从 0.5 开始
+    notes = [
+        (60, 0.0, 0.7, 100),
+        (72, 0.5, 1.0, 100),
+        (62, 1.1, 1.5, 100),  # 低音后续，不重叠
+    ]
+    lines = _split_candidate_lines(notes)
+    assert len(lines) == 2
+    # 62 应该跟 72（gap 更小），而不是跟 60（虽然 60 也是低音但 gap 更大）
+    # 这是贪心策略的预期行为：优先最小 gap
+    line_with_60 = [line for line in lines if any(n[0] == 60 for n in line)][0]
+    line_with_72 = [line for line in lines if any(n[0] == 72 for n in line)][0]
+    # 60 单独一条线（因为 62 被 72 抢走了）
+    assert len(line_with_60) == 1
+    # 72 和 62 在同一条线（gap 更小）
+    assert any(n[0] == 62 for n in line_with_72)
+    assert len(line_with_72) == 2
