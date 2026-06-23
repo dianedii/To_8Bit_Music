@@ -98,3 +98,27 @@ def test_extract_stable_pitches_two_tones():
     midis = [p[0] for p in pitches[:2]]
     assert any(abs(m - 69) <= 1 for m in midis)
     assert any(abs(m - 76) <= 1 for m in midis)
+
+
+from src.pop_synthesizer import _merge_consecutive_notes
+
+
+def test_merge_consecutive_notes_joins_same_pitch():
+    notes = [
+        (69, 0.0, 0.3, 100),
+        (69, 0.32, 0.6, 100),
+        (72, 0.6, 0.9, 100),
+    ]
+    merged = _merge_consecutive_notes(notes, gap_threshold=0.05)
+    assert len(merged) == 2
+    assert merged[0] == (69, 0.0, 0.6, 100)
+    assert merged[1] == (72, 0.6, 0.9, 100)
+
+
+def test_merge_consecutive_notes_keeps_different_pitches():
+    notes = [
+        (69, 0.0, 0.3, 100),
+        (72, 0.32, 0.6, 100),
+    ]
+    merged = _merge_consecutive_notes(notes, gap_threshold=0.05)
+    assert len(merged) == 2

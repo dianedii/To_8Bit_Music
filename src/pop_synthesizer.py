@@ -189,6 +189,26 @@ def _extract_stable_pitches(
     return unique
 
 
+def _merge_consecutive_notes(
+    notes: list[tuple[int, float, float, int]],
+    gap_threshold: float = 0.05,
+) -> list[tuple[int, float, float, int]]:
+    """合并相邻片段中相同音高的音符，避免重复 attack。"""
+    if not notes:
+        return []
+
+    notes = sorted(notes, key=lambda n: n[1])
+    merged = [list(notes[0])]
+    for pitch, onset, offset, velocity in notes[1:]:
+        prev = merged[-1]
+        if pitch == prev[0] and (onset - prev[2]) <= gap_threshold:
+            prev[2] = max(prev[2], offset)
+            prev[3] = max(prev[3], velocity)
+        else:
+            merged.append([pitch, onset, offset, velocity])
+    return [tuple(n) for n in merged]
+
+
 def synthesize_pop_chip(
     audio: np.ndarray,
     sample_rate: int = 44100,
