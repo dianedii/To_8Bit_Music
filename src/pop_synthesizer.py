@@ -143,6 +143,52 @@ def _match_peaks(prev_peaks, candidates, max_dist: float = 0.35):
     return matched, used
 
 
+def _extract_stable_pitches(
+    segment: np.ndarray,
+    sample_rate: int,
+    n_voices: int = 4,
+    hop_length: int = 512,
+) -> list[tuple[int, int]]:
+    """从单一片段内提取稳定的 1~n_voices 个音高。"""
+    if len(segment) < hop_length:
+        return []
+
+    n_fft = min(2048, max(512, len(segment)))
+    stft = np.abs(librosa.stft(segment, n_fft=n_fft, hop_length=hop_length))
+    avg_spectrum = np.mean(stft, axis=1)
+    freqs = librosa.fft_frequencies(sr=sample_rate, n_fft=n_fft)
+
+    peaks, _ = signal.find_peaks(
+        avg_spectrum,
+        height=np.max(avg_spectrum) * 0.05,
+        distance=max(1, int(50 / (sample_rate / n_fft))),
+    )
+    if len(peaks) == 0:
+        return []
+
+    peak_infos = [(int(p), float(avg_spectrum[p])) for p in peaks if freqs[p] > 40.0]
+    peak_infos.sort(key=lambda x: x[1], reverse=True)
+    peak_infos = peak_infos[:n_voices]
+
+    rms = np.sqrt(np.mean(segment ** 2))
+    velocity = int(np.clip(rms * 127 * 4, 1, 127))
+
+    pitches = []
+    for peak_idx, amp in peak_infos:
+        freq = freqs[peak_idx]
+        midi_float = 69.0 + 12.0 * np.log2(freq / 440.0)
+        midi = int(np.round(np.clip(midi_float, 0, 127)))
+        pitches.append((midi, velocity))
+
+    seen = set()
+    unique = []
+    for midi, vel in pitches:
+        if midi not in seen:
+            seen.add(midi)
+            unique.append((midi, vel))
+    return unique
+
+
 def synthesize_pop_chip(
     audio: np.ndarray,
     sample_rate: int = 44100,

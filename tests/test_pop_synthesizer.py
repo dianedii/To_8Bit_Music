@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.pop_synthesizer import _detect_onsets, _segment_audio
+from src.pop_synthesizer import _detect_onsets, _segment_audio, _extract_stable_pitches
 
 
 def generate_click_tone(freq, duration, sr, onset_times):
@@ -70,3 +70,31 @@ def test_segment_audio_splits_by_onsets():
     for start, end in segments:
         assert 0 <= start < end <= len(audio)
         assert (end - start) / sr >= 0.05
+
+
+def test_extract_stable_pitches_single_tone():
+    sr = 44100
+    duration = 0.3
+    freq = 440.0
+    t = np.arange(int(duration * sr)) / sr
+    segment = np.sin(2 * np.pi * freq * t) * 0.5
+    pitches = _extract_stable_pitches(segment, sr, n_voices=4, hop_length=512)
+    assert len(pitches) >= 1
+    midi, velocity = pitches[0]
+    assert abs(midi - 69) <= 1
+    assert 0 < velocity <= 127
+
+
+def test_extract_stable_pitches_two_tones():
+    sr = 44100
+    duration = 0.3
+    t = np.arange(int(duration * sr)) / sr
+    segment = (
+        np.sin(2 * np.pi * 440.0 * t) * 0.4
+        + np.sin(2 * np.pi * 659.25 * t) * 0.4
+    )
+    pitches = _extract_stable_pitches(segment, sr, n_voices=4, hop_length=512)
+    assert len(pitches) >= 2
+    midis = [p[0] for p in pitches[:2]]
+    assert any(abs(m - 69) <= 1 for m in midis)
+    assert any(abs(m - 76) <= 1 for m in midis)
