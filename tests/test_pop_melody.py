@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.pop_melody import _pyin_to_notes, _split_candidate_lines
+from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line
 
 
 def generate_pure_tone(freq, duration, sr):
@@ -70,3 +70,20 @@ def test_split_candidate_lines_real_overlap():
     # 72 和 62 在同一条线（gap 更小）
     assert any(n[0] == 62 for n in line_with_72)
     assert len(line_with_72) == 2
+
+
+def test_score_melody_line_prefers_smooth():
+    smooth_line = [
+        (60, 0.0, 0.4, 100),
+        (62, 0.5, 0.9, 100),
+        (64, 1.0, 1.4, 100),
+    ]
+    ornament_line = [
+        (72, 0.0, 0.1, 100),
+        (74, 0.1, 0.2, 100),
+        (76, 0.2, 0.3, 100),
+        (77, 0.3, 0.4, 100),
+    ]
+    smooth_score = _score_melody_line(smooth_line)
+    ornament_score = _score_melody_line(ornament_line)
+    assert smooth_score > ornament_score

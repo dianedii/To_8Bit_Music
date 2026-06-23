@@ -98,3 +98,73 @@ def _split_candidate_lines(
             lines.append([note])
 
     return lines
+
+
+def _score_melody_line(
+    line: list[tuple[int, float, float, int]],
+    bar_duration: float = 2.0,
+) -> float:
+    """按歌唱平滑度、乐句重复度、音域居中、力度稳定性打分。"""
+    if len(line) < 2:
+        return 0.0
+
+    pitches = [n[0] for n in line]
+    onsets = [n[1] for n in line]
+    offsets = [n[2] for n in line]
+    velocities = [n[3] for n in line]
+    durations = [offsets[i] - onsets[i] for i in range(len(line))]
+
+    intervals = [abs(pitches[i] - pitches[i - 1]) for i in range(1, len(pitches))]
+    small_interval_ratio = sum(1 for iv in intervals if 1 <= iv <= 5) / len(intervals) if intervals else 0.0
+    large_jump_ratio = sum(1 for iv in intervals if iv > 12) / len(intervals) if intervals else 0.0
+
+    gaps = [onsets[i] - offsets[i - 1] for i in range(1, len(line))]
+    rest_ratio = sum(1 for g in gaps if g > 0.05) / len(gaps) if gaps else 0.0
+    no_rest_penalty = 0.2 if rest_ratio == 0 else 0.0
+
+    long_note_ratio = sum(1 for d in durations if d >= 0.3) / len(durations) if durations else 0.0
+    sixteenth_note_ratio = sum(1 for d in durations if d < 0.15) / len(durations) if durations else 0.0
+
+    smoothness = (
+        0.4 * small_interval_ratio
+        + 0.3 * rest_ratio
+        + 0.3 * long_note_ratio
+        - 0.4 * sixteenth_note_ratio
+        - 0.4 * large_jump_ratio
+        - no_rest_penalty
+    )
+    smoothness = float(np.clip(smoothness, 0.0, 1.0))
+
+    avg_duration = np.mean(durations) if durations else 0.25
+    notes_per_bar = max(2, int(bar_duration / max(avg_duration, 0.01)))
+    contour = [np.sign(pitches[i] - pitches[i - 1]) for i in range(1, len(pitches))]
+
+    repetition_score = 0.0
+    if len(contour) >= notes_per_bar * 2:
+        matches = 0
+        segments = 0
+        for start in range(0, len(contour) - notes_per_bar * 2 + 1, notes_per_bar):
+            seg1 = contour[start:start + notes_per_bar]
+            seg2 = contour[start + notes_per_bar:start + notes_per_bar * 2]
+            if len(seg1) == len(seg2) and len(seg1) > 0:
+                similarity = sum(1 for a, b in zip(seg1, seg2) if a == b) / len(seg1)
+                matches += similarity
+                segments += 1
+        repetition_score = matches / segments if segments > 0 else 0.0
+    repetition_score = float(np.clip(repetition_score, 0.0, 1.0))
+
+    target_low = librosa.note_to_midi('C3')
+    target_high = librosa.note_to_midi('F5')
+    in_range = sum(1 for p in pitches if target_low <= p <= target_high) / len(pitches)
+    pitch_range_score = float(np.clip(in_range, 0.0, 1.0))
+
+    vel_diffs = [abs(velocities[i] - velocities[i - 1]) for i in range(1, len(velocities))]
+    vel_variance = np.mean(vel_diffs) / 127.0 if vel_diffs else 0.0
+    velocity_score = float(np.clip(1.0 - vel_variance, 0.0, 1.0))
+
+    return (
+        0.45 * smoothness
+        + 0.30 * repetition_score
+        + 0.15 * pitch_range_score
+        + 0.10 * velocity_score
+    )
