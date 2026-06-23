@@ -19,3 +19,15 @@ def test_pyin_to_notes_detects_single_tone():
     assert onset < 0.1
     assert offset > 0.5
     assert 1 <= velocity <= 127
+
+
+def test_pyin_to_notes_empty_audio():
+    notes = _pyin_to_notes(np.array([], dtype=np.float64), 44100)
+    assert notes == []
+
+
+def test_pyin_to_notes_silence():
+    sr = 44100
+    audio = np.zeros(int(sr * 0.5), dtype=np.float64)
+    notes = _pyin_to_notes(audio, sr)
+    assert notes == []

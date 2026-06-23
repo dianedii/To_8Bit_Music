@@ -8,7 +8,10 @@ def _pyin_to_notes(
     hop_length: int = 512,
     min_note_duration: float = 0.05,
 ) -> list[tuple[int, float, float, int]]:
-    """用 pYIN 将音频转为音符事件列表。"""
+    """用 pYIN 将音频转为音符事件列表。
+
+    返回 [(midi_pitch, onset_time, offset_time, velocity), ...]
+    """
     f0, voiced_flag, voiced_prob = librosa.pyin(
         audio,
         fmin=librosa.note_to_hz('C2'),
@@ -26,17 +29,23 @@ def _pyin_to_notes(
     start_time = None
     velocities = []
 
+    def _finalize_note():
+        nonlocal current_pitch, start_time, velocities
+        if current_pitch is None:
+            return
+        duration = times[i] - start_time
+        if duration >= min_note_duration:
+            notes.append((current_pitch, start_time, times[i], int(np.mean(velocities))))
+        current_pitch = None
+        velocities = []
+
     for i in range(len(f0)):
         if not voiced_flag[i] or np.isnan(f0[i]):
-            if current_pitch is not None:
-                duration = times[i] - start_time
-                if duration >= min_note_duration:
-                    notes.append((current_pitch, start_time, times[i], int(np.mean(velocities))))
-                current_pitch = None
-                velocities = []
+            _finalize_note()
             continue
 
         midi = int(np.round(librosa.hz_to_midi(f0[i])))
+        # 用 voiced_prob 作为置信度/力度代理；后续可结合 RMS 能量改进
         vel = int(np.clip(voiced_prob[i] * 127, 1, 127))
 
         if current_pitch is None:
@@ -46,9 +55,7 @@ def _pyin_to_notes(
         elif abs(midi - current_pitch) <= 1:
             velocities.append(vel)
         else:
-            duration = times[i] - start_time
-            if duration >= min_note_duration:
-                notes.append((current_pitch, start_time, times[i], int(np.mean(velocities))))
+            _finalize_note()
             current_pitch = midi
             start_time = times[i]
             velocities = [vel]
