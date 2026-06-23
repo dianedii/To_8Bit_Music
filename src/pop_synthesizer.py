@@ -43,9 +43,9 @@ def _segment_audio(
         if o - merged[-1] >= min_note_duration:
             merged.append(o)
         else:
-            merged[-1] = o
+            pass
 
-    boundaries = list(merged) + [len(audio) / sample_rate]
+    boundaries = [0] + list(merged) + [len(audio) / sample_rate]
     segments = []
     for i in range(len(boundaries) - 1):
         start = int(boundaries[i] * sample_rate)
@@ -165,8 +165,6 @@ def synthesize_pop_chip(
     Returns:
         合成后的单声道 float32 音频
     """
-    import librosa
-
     mono = _audio_to_mono_float(audio)
     if len(mono) == 0:
         return np.zeros(0, dtype=np.float32)
