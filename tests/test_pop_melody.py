@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line, _apply_hard_filters
+from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line, _apply_hard_filters, _extract_main_melody, _extract_harmony_voice
 
 
 def generate_pure_tone(freq, duration, sr):
@@ -149,4 +149,24 @@ def test_apply_hard_filters_removes_repeating_accompaniment():
     filtered = _apply_hard_filters([repeating, melody])
     assert len(filtered) == 1
     assert filtered[0][0][0] == 72
+
+
+def test_extract_main_melody_returns_highest_scored():
+    lines = [
+        [(72, 0.0, 0.05, 100), (74, 0.05, 0.10, 100)],  # 碎音装饰
+        [(60, 0.0, 0.4, 100), (62, 0.5, 0.9, 100)],      # 主旋律
+    ]
+    filtered = _apply_hard_filters(lines)
+    main = _extract_main_melody(filtered)
+    assert len(main) == 2
+    assert main[0][0] == 60
+
+
+def test_extract_harmony_voice_returns_consonant():
+    main_line = [(60, 0.0, 0.5, 100)]  # C4
+    other_line = [(64, 0.0, 0.5, 100)]  # E4，大三度
+    harmony = _extract_harmony_voice(main_line, [other_line], max_voices=1, volume_ratio=0.6)
+    assert len(harmony) == 1
+    assert harmony[0][0] == 64
+    assert harmony[0][3] == int(127 * 0.6)
 

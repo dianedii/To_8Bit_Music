@@ -207,3 +207,50 @@ def _apply_hard_filters(
 
         filtered.append(line)
     return filtered
+
+
+_CONSONANT_INTERVALS = {3, 4, 7, 8, 12}
+
+
+def _extract_main_melody(
+    lines: list[list[tuple[int, float, float, int]]],
+) -> list[tuple[int, float, float, int]]:
+    """从候选线中选出主旋律线。"""
+    if not lines:
+        return []
+    scored = [(_score_melody_line(line), line) for line in lines]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[0][1]
+
+
+def _extract_harmony_voice(
+    main_line: list[tuple[int, float, float, int]],
+    other_lines: list[list[tuple[int, float, float, int]]],
+    max_voices: int = 1,
+    volume_ratio: float = 0.6,
+) -> list[tuple[int, float, float, int]]:
+    """从剩余候选线中提取与主旋律形成和谐音程的点缀音符。"""
+    if max_voices <= 0 or not other_lines:
+        return []
+
+    scored = [(_score_melody_line(line), line) for line in other_lines]
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    harmony_notes = []
+    voices_added = 0
+    for _, line in scored:
+        if voices_added >= max_voices:
+            break
+        for note in line:
+            pitch, onset, offset, _ = note
+            for main_note in main_line:
+                m_pitch, m_onset, m_offset, _ = main_note
+                if onset < m_offset and offset > m_onset:
+                    interval = abs(pitch - m_pitch) % 12
+                    if interval in _CONSONANT_INTERVALS:
+                        harmony_notes.append((pitch, onset, offset, int(127 * volume_ratio)))
+                        break
+        voices_added += 1
+
+    harmony_notes.sort(key=lambda n: n[1])
+    return harmony_notes
