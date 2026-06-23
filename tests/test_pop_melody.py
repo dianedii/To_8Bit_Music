@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line
+from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line, _apply_hard_filters
 
 
 def generate_pure_tone(freq, duration, sr):
@@ -130,3 +130,23 @@ def test_score_melody_line_large_jumps_penalized():
     smooth_line = [(60, 0.0, 0.3, 100), (62, 0.3, 0.6, 100), (64, 0.6, 0.9, 100)]
     jumpy_line = [(60, 0.0, 0.3, 100), (72, 0.3, 0.6, 100), (60, 0.6, 0.9, 100)]  # 八度跳
     assert _score_melody_line(smooth_line) > _score_melody_line(jumpy_line)
+
+
+def test_apply_hard_filters_removes_ornament_line():
+    lines = [
+        [(72, 0.0, 0.05, 100), (74, 0.05, 0.10, 100), (76, 0.10, 0.15, 100)],
+        [(60, 0.0, 0.4, 100), (62, 0.5, 0.9, 100)],
+    ]
+    filtered = _apply_hard_filters(lines)
+    assert len(filtered) == 1
+    assert filtered[0][0][0] == 60
+
+
+def test_apply_hard_filters_removes_repeating_accompaniment():
+    # 8 小节完全重复的分解和弦，每小节 4 个音符
+    repeating = [(60 + i % 4, i * 0.125, i * 0.125 + 0.1, 100) for i in range(32)]
+    melody = [(72, 0.0, 0.5, 100), (74, 0.6, 1.1, 100)]
+    filtered = _apply_hard_filters([repeating, melody])
+    assert len(filtered) == 1
+    assert filtered[0][0][0] == 72
+

@@ -172,3 +172,38 @@ def _score_melody_line(
         + 0.15 * pitch_range_score
         + 0.10 * velocity_score
     )
+
+
+def _apply_hard_filters(
+    lines: list[list[tuple[int, float, float, int]]],
+    bar_duration: float = 2.0,
+) -> list[list[tuple[int, float, float, int]]]:
+    """硬性过滤：碎音装饰线与重复伴奏线淘汰。"""
+    filtered = []
+    for line in lines:
+        if len(line) == 0:
+            continue
+
+        durations = [n[2] - n[1] for n in line]
+        short_ratio = sum(1 for d in durations if d < 0.15) / len(durations)
+        if short_ratio > 0.8:
+            continue
+
+        pitches = [n[0] for n in line]
+        avg_duration = np.mean(durations) if durations else 0.25
+        notes_per_bar = max(2, int(bar_duration / max(avg_duration, 0.01)))
+
+        if len(pitches) >= notes_per_bar * 8:
+            pattern = pitches[:notes_per_bar]
+            repeats = 0
+            for i in range(notes_per_bar, len(pitches), notes_per_bar):
+                segment = pitches[i:i + notes_per_bar]
+                if len(segment) == len(pattern) and all(a == b for a, b in zip(pattern, segment)):
+                    repeats += 1
+                else:
+                    break
+            if repeats >= 7:
+                continue
+
+        filtered.append(line)
+    return filtered
