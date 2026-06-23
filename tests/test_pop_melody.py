@@ -87,3 +87,46 @@ def test_score_melody_line_prefers_smooth():
     smooth_score = _score_melody_line(smooth_line)
     ornament_score = _score_melody_line(ornament_line)
     assert smooth_score > ornament_score
+
+
+def test_score_melody_line_repetition():
+    # 有重复的 4 音符模式
+    repeated_line = [
+        (60, 0.0, 0.2, 100),
+        (62, 0.2, 0.4, 100),
+        (64, 0.4, 0.6, 100),
+        (65, 0.6, 0.8, 100),
+        (60, 0.8, 1.0, 100),
+        (62, 1.0, 1.2, 100),
+        (64, 1.2, 1.4, 100),
+        (65, 1.4, 1.6, 100),
+    ]
+    non_repeated_line = [
+        (60, 0.0, 0.2, 100),
+        (65, 0.2, 0.4, 100),
+        (70, 0.4, 0.6, 100),
+        (75, 0.6, 0.8, 100),
+    ]
+    assert _score_melody_line(repeated_line) > _score_melody_line(non_repeated_line)
+
+
+def test_score_melody_line_pitch_range():
+    in_range_line = [(60, i * 0.3, i * 0.3 + 0.25, 100) for i in range(6)]  # C4 附近
+    out_of_range_line = [(40, i * 0.3, i * 0.3 + 0.25, 100) for i in range(6)]  # 很低
+    assert _score_melody_line(in_range_line) > _score_melody_line(out_of_range_line)
+
+
+def test_score_melody_line_velocity_stability():
+    stable_line = [(60, i * 0.3, i * 0.3 + 0.25, 100) for i in range(6)]
+    unstable_line = [(60, i * 0.3, i * 0.3 + 0.25, 80 if i % 2 == 0 else 120) for i in range(6)]
+    assert _score_melody_line(stable_line) > _score_melody_line(unstable_line)
+
+
+def test_score_melody_line_short_line_returns_zero():
+    assert _score_melody_line([(60, 0.0, 0.3, 100)]) == 0.0
+
+
+def test_score_melody_line_large_jumps_penalized():
+    smooth_line = [(60, 0.0, 0.3, 100), (62, 0.3, 0.6, 100), (64, 0.6, 0.9, 100)]
+    jumpy_line = [(60, 0.0, 0.3, 100), (72, 0.3, 0.6, 100), (60, 0.6, 0.9, 100)]  # 八度跳
+    assert _score_melody_line(smooth_line) > _score_melody_line(jumpy_line)

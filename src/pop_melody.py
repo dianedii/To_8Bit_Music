@@ -115,7 +115,7 @@ def _score_melody_line(
     durations = [offsets[i] - onsets[i] for i in range(len(line))]
 
     intervals = [abs(pitches[i] - pitches[i - 1]) for i in range(1, len(pitches))]
-    small_interval_ratio = sum(1 for iv in intervals if 1 <= iv <= 5) / len(intervals) if intervals else 0.0
+    small_interval_ratio = sum(1 for iv in intervals if 0 <= iv <= 5) / len(intervals) if intervals else 0.0
     large_jump_ratio = sum(1 for iv in intervals if iv > 12) / len(intervals) if intervals else 0.0
 
     gaps = [onsets[i] - offsets[i - 1] for i in range(1, len(line))]
@@ -137,7 +137,11 @@ def _score_melody_line(
 
     avg_duration = np.mean(durations) if durations else 0.25
     notes_per_bar = max(2, int(bar_duration / max(avg_duration, 0.01)))
+    # 用音程序列方向（上升/下降/持平）比较重复度；注意重复音标记为 0
     contour = [np.sign(pitches[i] - pitches[i - 1]) for i in range(1, len(pitches))]
+
+    # 降低 notes_per_bar 要求，使常见旋律都能进入重复度检测
+    notes_per_bar = min(notes_per_bar, max(2, len(contour) // 2))
 
     repetition_score = 0.0
     if len(contour) >= notes_per_bar * 2:
