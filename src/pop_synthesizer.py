@@ -209,6 +209,47 @@ def _merge_consecutive_notes(
     return [tuple(n) for n in merged]
 
 
+def _synthesize_events(
+    notes: list[tuple[int, float, float, int]],
+    duration: float,
+    sample_rate: int,
+    waveform: str = 'square',
+) -> np.ndarray:
+    """将复音音符事件合成为稳定音高的芯片音频。"""
+    num_samples = int(duration * sample_rate)
+    audio = np.zeros(num_samples, dtype=np.float64)
+
+    for pitch, onset, offset, velocity in notes:
+        freq = _midi_to_freq(pitch)
+        start_idx = max(0, int(onset * sample_rate))
+        end_idx = min(num_samples, int(offset * sample_rate))
+        if start_idx >= end_idx:
+            continue
+
+        length = end_idx - start_idx
+        t = np.arange(length) / sample_rate
+        phase = 2.0 * np.pi * freq * t
+        wave = _bandlimited_waveform(phase, freq, sample_rate, waveform)
+
+        env = np.ones(length, dtype=np.float64)
+        attack_samples = min(int(0.005 * sample_rate), length)
+        decay_samples = min(int(0.015 * sample_rate), length - attack_samples)
+        release_samples = min(int(0.02 * sample_rate), length)
+
+        env[:attack_samples] = np.linspace(0.0, 1.0, attack_samples)
+        if decay_samples > 0:
+            env[attack_samples:attack_samples + decay_samples] = np.linspace(
+                1.0, 0.85, decay_samples
+            )
+        if release_samples > 0:
+            env[-release_samples:] = np.linspace(env[-release_samples], 0.0, release_samples)
+
+        amp = (velocity / 127.0) * 0.25
+        audio[start_idx:end_idx] += wave * env * amp
+
+    return audio
+
+
 def synthesize_pop_chip(
     audio: np.ndarray,
     sample_rate: int = 44100,

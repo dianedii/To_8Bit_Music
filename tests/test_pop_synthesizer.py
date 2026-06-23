@@ -100,7 +100,7 @@ def test_extract_stable_pitches_two_tones():
     assert any(abs(m - 76) <= 1 for m in midis)
 
 
-from src.pop_synthesizer import _merge_consecutive_notes
+from src.pop_synthesizer import _merge_consecutive_notes, _synthesize_events
 
 
 def test_merge_consecutive_notes_joins_same_pitch():
@@ -122,3 +122,34 @@ def test_merge_consecutive_notes_keeps_different_pitches():
     ]
     merged = _merge_consecutive_notes(notes, gap_threshold=0.05)
     assert len(merged) == 2
+
+
+def test_synthesize_events_shape_and_tail_silence():
+    sr = 44100
+    duration = 0.5
+    notes = [
+        (69, 0.0, 0.2, 100),
+        (72, 0.25, 0.45, 100),
+    ]
+    audio = _synthesize_events(notes, duration, sr, waveform='square')
+    assert isinstance(audio, np.ndarray)
+    assert audio.dtype == np.float64
+    assert len(audio) == int(duration * sr)
+    assert np.max(np.abs(audio)) <= 1.0
+    tail = audio[int(0.46 * sr):]
+    assert np.max(np.abs(tail)) < 0.1
+
+
+def test_synthesize_events_pitch_stability():
+    """验证同一音符片段内音高稳定（无颤音/抖动）。"""
+    sr = 44100
+    duration = 0.3
+    notes = [(69, 0.0, 0.25, 100)]
+    audio = _synthesize_events(notes, duration, sr, waveform='square')
+    autocorr = np.correlate(audio[: int(0.2 * sr)], audio[: int(0.2 * sr)], mode='full')
+    autocorr = autocorr[len(autocorr) // 2:]
+    peak = np.argmax(autocorr[100:]) + 100
+    estimated_period = peak / sr
+    if estimated_period > 0:
+        estimated_freq = 1.0 / estimated_period
+        assert 420 <= estimated_freq <= 460
