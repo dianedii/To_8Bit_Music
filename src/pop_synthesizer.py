@@ -233,7 +233,7 @@ def _synthesize_events(
 
         env = np.ones(length, dtype=np.float64)
         attack_samples = min(int(0.005 * sample_rate), length)
-        decay_samples = min(int(0.015 * sample_rate), length - attack_samples)
+        decay_samples = min(int(0.015 * sample_rate), max(0, length - attack_samples))
         release_samples = min(int(0.02 * sample_rate), length)
 
         env[:attack_samples] = np.linspace(0.0, 1.0, attack_samples)
@@ -242,11 +242,14 @@ def _synthesize_events(
                 1.0, 0.85, decay_samples
             )
         if release_samples > 0:
-            env[-release_samples:] = np.linspace(env[-release_samples], 0.0, release_samples)
+            release_start_idx = max(0, length - release_samples)
+            start_amp = env[release_start_idx]
+            env[-release_samples:] = np.linspace(start_amp, 0.0, release_samples)
 
         amp = (velocity / 127.0) * 0.25
         audio[start_idx:end_idx] += wave * env * amp
 
+    audio = np.clip(audio, -1.0, 1.0)
     return audio
 
 

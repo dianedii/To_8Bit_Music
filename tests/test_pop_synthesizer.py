@@ -148,7 +148,8 @@ def test_synthesize_events_pitch_stability():
     audio = _synthesize_events(notes, duration, sr, waveform='square')
     autocorr = np.correlate(audio[: int(0.2 * sr)], audio[: int(0.2 * sr)], mode='full')
     autocorr = autocorr[len(autocorr) // 2:]
-    peak = np.argmax(autocorr[100:]) + 100
+    min_lag = int(0.5 * sr / 440.0)  # about half period
+    peak = np.argmax(autocorr[min_lag:]) + min_lag
     estimated_period = peak / sr
     if estimated_period > 0:
         estimated_freq = 1.0 / estimated_period
