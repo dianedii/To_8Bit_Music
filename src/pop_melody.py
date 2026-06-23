@@ -66,3 +66,33 @@ def _pyin_to_notes(
             notes.append((current_pitch, start_time, times[-1], int(np.mean(velocities))))
 
     return notes
+
+
+def _split_candidate_lines(
+    notes: list[tuple[int, float, float, int]],
+    gap_threshold: float = 0.05,
+) -> list[list[tuple[int, float, float, int]]]:
+    """将重叠音符拆分为不重叠的连续单音候选线。"""
+    if not notes:
+        return []
+
+    notes = sorted(notes, key=lambda n: n[1])
+    lines: list[list[tuple[int, float, float, int]]] = [[notes[0]]]
+
+    for note in notes[1:]:
+        onset = note[1]
+        best_line = None
+        best_gap = float('inf')
+        for line in lines:
+            last = line[-1]
+            if last[2] <= onset + gap_threshold:
+                gap = onset - last[2]
+                if gap < best_gap:
+                    best_gap = gap
+                    best_line = line
+        if best_line is not None:
+            best_line.append(note)
+        else:
+            lines.append([note])
+
+    return lines
