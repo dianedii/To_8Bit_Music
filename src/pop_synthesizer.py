@@ -12,6 +12,50 @@ import numpy as np
 from scipy import signal
 from typing import Literal
 
+import librosa
+
+
+def _detect_onsets(audio: np.ndarray, sample_rate: int, hop_length: int = 512, wait: int = 3) -> np.ndarray:
+    """基于频谱通量检测音符起始点，返回秒级时间数组。"""
+    onset_frames = librosa.onset.onset_detect(
+        y=audio,
+        sr=sample_rate,
+        hop_length=hop_length,
+        wait=wait,
+        units='frames',
+    )
+    return librosa.frames_to_time(onset_frames, sr=sample_rate, hop_length=hop_length)
+
+
+def _segment_audio(
+    audio: np.ndarray,
+    sample_rate: int,
+    onsets: np.ndarray,
+    min_note_duration: float = 0.05,
+) -> list[tuple[int, int]]:
+    """按 onset 切分音频为样本索引片段，过滤过短片段。"""
+    if len(onsets) == 0:
+        return [(0, len(audio))]
+
+    sorted_onsets = np.sort(onsets)
+    merged = [sorted_onsets[0]]
+    for o in sorted_onsets[1:]:
+        if o - merged[-1] >= min_note_duration:
+            merged.append(o)
+        else:
+            merged[-1] = o
+
+    boundaries = list(merged) + [len(audio) / sample_rate]
+    segments = []
+    for i in range(len(boundaries) - 1):
+        start = int(boundaries[i] * sample_rate)
+        end = int(boundaries[i + 1] * sample_rate)
+        start = max(0, min(start, len(audio)))
+        end = max(0, min(end, len(audio)))
+        if end - start >= int(min_note_duration * sample_rate):
+            segments.append((start, end))
+    return segments
+
 
 def _audio_to_mono_float(audio: np.ndarray) -> np.ndarray:
     """将音频转为单声道 float64 [-1, 1]。"""
