@@ -4,6 +4,26 @@ import pytest
 from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line, _apply_hard_filters, _extract_main_melody, _extract_harmony_voice, _smooth_f0
 
 
+def test_score_melody_line_accepts_float_pitch():
+    line = [
+        (60.2, 0.0, 0.3, 100),
+        (62.1, 0.35, 0.6, 100),
+        (64.0, 0.65, 0.9, 100),
+    ]
+    score = _score_melody_line(line)
+    assert 0.0 <= score <= 1.0
+
+
+def test_hard_filters_accepts_float_pitch():
+    lines = [
+        [(60.0, 0.0, 0.05, 100), (62.0, 0.06, 0.11, 100)],
+        [(60.2, 0.0, 0.3, 100), (64.1, 0.35, 0.65, 100)],
+    ]
+    filtered = _apply_hard_filters(lines)
+    assert len(filtered) == 1
+    assert abs(filtered[0][0][0] - 60.2) < 0.01
+
+
 def generate_pure_tone(freq, duration, sr):
     t = np.arange(int(duration * sr)) / sr
     return np.sin(2 * np.pi * freq * t) * 0.5

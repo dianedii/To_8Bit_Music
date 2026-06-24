@@ -100,8 +100,8 @@ def _pyin_to_notes(
 
 
 def _split_candidate_lines(
-    notes: list[tuple[int, float, float, int]],
-) -> list[list[tuple[int, float, float, int]]]:
+    notes: list[tuple[float, float, float, int]],
+) -> list[list[tuple[float, float, float, int]]]:
     """将音符事件拆分为若干条不重叠的连续单音候选线。
 
     每条线内的音符按时间顺序排列，且任意相邻音符不重叠。
@@ -132,14 +132,14 @@ def _split_candidate_lines(
 
 
 def _score_melody_line(
-    line: list[tuple[int, float, float, int]],
+    line: list[tuple[float, float, float, int]],
     bar_duration: float = 2.0,
 ) -> float:
     """按歌唱平滑度、乐句重复度、音域居中、力度稳定性打分。"""
     if len(line) < 2:
         return 0.0
 
-    pitches = [n[0] for n in line]
+    pitches = [int(round(n[0])) for n in line]
     onsets = [n[1] for n in line]
     offsets = [n[2] for n in line]
     velocities = [n[3] for n in line]
@@ -206,9 +206,9 @@ def _score_melody_line(
 
 
 def _apply_hard_filters(
-    lines: list[list[tuple[int, float, float, int]]],
+    lines: list[list[tuple[float, float, float, int]]],
     bar_duration: float = 2.0,
-) -> list[list[tuple[int, float, float, int]]]:
+) -> list[list[tuple[float, float, float, int]]]:
     """硬性过滤：碎音装饰线与重复伴奏线淘汰。"""
     filtered = []
     for line in lines:
@@ -220,7 +220,7 @@ def _apply_hard_filters(
         if short_ratio > 0.8:
             continue
 
-        pitches = [n[0] for n in line]
+        pitches = [int(round(n[0])) for n in line]
         avg_duration = np.mean(durations) if durations else 0.25
         notes_per_bar = max(2, int(bar_duration / max(avg_duration, 0.01)))
 
@@ -244,8 +244,8 @@ _CONSONANT_INTERVALS = {3, 4, 7, 8, 12}
 
 
 def _extract_main_melody(
-    lines: list[list[tuple[int, float, float, int]]],
-) -> list[tuple[int, float, float, int]]:
+    lines: list[list[tuple[float, float, float, int]]],
+) -> list[tuple[float, float, float, int]]:
     """从候选线中选出主旋律线。"""
     if not lines:
         return []
@@ -255,11 +255,11 @@ def _extract_main_melody(
 
 
 def _extract_harmony_voice(
-    main_line: list[tuple[int, float, float, int]],
-    other_lines: list[list[tuple[int, float, float, int]]],
+    main_line: list[tuple[float, float, float, int]],
+    other_lines: list[list[tuple[float, float, float, int]]],
     max_voices: int = 1,
     volume_ratio: float = 0.6,
-) -> list[tuple[int, float, float, int]]:
+) -> list[tuple[float, float, float, int]]:
     """从剩余候选线中提取与主旋律形成和谐音程的点缀音符。"""
     if max_voices <= 0 or not other_lines:
         return []
@@ -277,7 +277,7 @@ def _extract_harmony_voice(
             for main_note in main_line:
                 m_pitch, m_onset, m_offset, _ = main_note
                 if onset < m_offset and offset > m_onset:
-                    interval = abs(pitch - m_pitch) % 12
+                    interval = abs(int(round(pitch)) - int(round(m_pitch))) % 12
                     if interval in _CONSONANT_INTERVALS:
                         harmony_notes.append((pitch, onset, offset, int(127 * volume_ratio)))
                         break
