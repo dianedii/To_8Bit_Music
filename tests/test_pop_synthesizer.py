@@ -203,3 +203,34 @@ def test_apply_legato_keeps_separated_notes():
     ]
     merged = _apply_legato(notes, threshold=0.05)
     assert merged[0][2] == 0.3
+
+
+def test_apply_legato_skips_overlapping_notes():
+    notes = [
+        (60.0, 0.0, 0.5, 100),
+        (62.0, 0.45, 0.9, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert len(merged) == 2
+    assert merged[0][2] == 0.5  # first note not extended
+
+
+def test_apply_legato_keeps_max_velocity():
+    notes = [
+        (60.0, 0.0, 0.45, 80),
+        (62.0, 0.48, 0.9, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert merged[0][3] == 100
+
+
+def test_apply_legato_chains_multiple_notes():
+    notes = [
+        (60.0, 0.0, 0.25, 100),
+        (62.0, 0.28, 0.55, 100),
+        (64.0, 0.58, 0.85, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert len(merged) == 3
+    assert merged[0][2] == 0.28
+    assert merged[1][2] == 0.58
