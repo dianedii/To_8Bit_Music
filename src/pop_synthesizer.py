@@ -101,8 +101,23 @@ def _freq_to_midi(freq: float) -> float:
     return 69.0 + 12.0 * np.log2(freq / 440.0)
 
 
+def _apply_lowpass(
+    audio: np.ndarray,
+    sample_rate: int,
+    cutoff: float = 8000.0,
+) -> np.ndarray:
+    """对音频做 6dB/oct 低通滤波，软化高频。"""
+    if cutoff <= 0 or cutoff >= sample_rate / 2:
+        return audio
+    b, a = signal.butter(1, cutoff / (sample_rate / 2), btype='low')
+    return signal.filtfilt(b, a, audio)
+
+
 def _bandlimited_waveform(phase: np.ndarray, freq: float, sample_rate: int, waveform: str) -> np.ndarray:
-    """根据瞬时基频限制谐波数，生成带限方波/三角波/锯齿波。"""
+    """根据瞬时基频限制谐波数，生成带限方波/三角波/锯齿波/正弦波。"""
+    if waveform == 'sine':
+        return np.sin(phase)
+
     max_harm = int(np.floor((sample_rate / 2.5) / max(freq, 20.0)))
     max_harm = max(1, min(max_harm, 40))
 

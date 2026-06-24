@@ -9,6 +9,8 @@ from src.pop_synthesizer import (
     _synthesize_events,
     synthesize_pop_chip,
     _apply_legato,
+    _apply_lowpass,
+    _bandlimited_waveform,
 )
 
 
@@ -234,3 +236,25 @@ def test_apply_legato_chains_multiple_notes():
     assert len(merged) == 3
     assert merged[0][2] == 0.28
     assert merged[1][2] == 0.58
+
+
+def test_apply_lowpass_reduces_high_freq():
+    sr = 44100
+    t = np.arange(sr) / sr
+    audio = np.sin(2 * np.pi * 12000 * t)
+    filtered = _apply_lowpass(audio, sr, cutoff=8000)
+    assert np.max(np.abs(filtered)) <= np.max(np.abs(audio))
+    fft_in = np.abs(np.fft.rfft(audio))
+    fft_out = np.abs(np.fft.rfft(filtered))
+    # Compare energy in the stopband (above cutoff) relative to passband
+    cutoff_bin = int(8000 / (sr / len(fft_in)))
+    assert fft_out[cutoff_bin:].sum() < fft_in[cutoff_bin:].sum()
+
+
+def test_bandlimited_waveform_sine():
+    sr = 44100
+    freq = 440.0
+    t = np.arange(int(sr * 0.1)) / sr
+    phase = 2 * np.pi * freq * t
+    wave = _bandlimited_waveform(phase, freq, sr, 'sine')
+    np.testing.assert_allclose(wave, np.sin(phase), atol=1e-6)
