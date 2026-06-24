@@ -121,6 +121,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "请先选择 MP3 文件")
             return
 
+        if self.worker is not None and self.worker.isRunning():
+            return
+
         self.convert_btn.setEnabled(False)
         self.open_folder_btn.setEnabled(False)
         self.progress_bar.setValue(0)
@@ -131,9 +134,10 @@ class MainWindow(QMainWindow):
             "锯齿波": "sawtooth",
             "正弦波": "sine",
         }
-        waveform = waveform_map[self.waveform_combo.currentText()]
+        waveform = waveform_map.get(self.waveform_combo.currentText(), "triangle")
         chip_mix = self.chip_mix_slider.value() / 100.0
 
+        # 复古纯度/音符简化强度仅用于已隐藏的 FC 模式，流行模式下固定为 0
         self.worker = ConvertWorker(
             input_path=self.input_path,
             purity=0,
