@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line, _apply_hard_filters, _extract_main_melody, _extract_harmony_voice
+from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line, _apply_hard_filters, _extract_main_melody, _extract_harmony_voice, _smooth_f0
 
 
 def generate_pure_tone(freq, duration, sr):
@@ -169,4 +169,20 @@ def test_extract_harmony_voice_returns_consonant():
     assert len(harmony) == 1
     assert harmony[0][0] == 64
     assert harmony[0][3] == int(127 * 0.6)
+
+
+def test_smooth_f0_removes_single_frame_spike():
+    f0 = np.array([440.0, 441.0, 880.0, 439.0, 440.0])
+    voiced = np.array([True, True, True, True, True])
+    smoothed = _smooth_f0(f0, voiced, kernel_size=3)
+    assert smoothed[2] == 441.0
+    np.testing.assert_array_equal(smoothed[voiced], np.array([440.0, 441.0, 441.0, 440.0, 440.0]))
+
+
+def test_smooth_f0_keeps_unvoiced_nan():
+    f0 = np.array([440.0, np.nan, 880.0, np.nan, 440.0])
+    voiced = np.array([True, False, True, False, True])
+    smoothed = _smooth_f0(f0, voiced, kernel_size=3)
+    assert np.isnan(smoothed[1])
+    assert np.isnan(smoothed[3])
 

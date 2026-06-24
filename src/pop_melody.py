@@ -1,5 +1,21 @@
 import numpy as np
 import librosa
+from scipy import ndimage
+
+
+def _smooth_f0(
+    f0: np.ndarray,
+    voiced_flag: np.ndarray,
+    kernel_size: int = 3,
+) -> np.ndarray:
+    """对 voiced 帧的 f0 做中值滤波，去除单帧毛刺，unvoiced 帧保持原值。"""
+    if len(f0) == 0:
+        return f0
+    kernel_size = max(3, kernel_size | 1)
+    smoothed = ndimage.median_filter(f0, size=kernel_size, mode='nearest')
+    result = f0.copy()
+    result[voiced_flag] = smoothed[voiced_flag]
+    return result
 
 
 def _pyin_to_notes(
