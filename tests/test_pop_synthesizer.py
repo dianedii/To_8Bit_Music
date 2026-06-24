@@ -2,109 +2,28 @@ import numpy as np
 import pytest
 
 from src.pop_synthesizer import (
-    _detect_onsets,
-    _segment_audio,
-    _extract_stable_pitches,
-    _merge_consecutive_notes,
     _synthesize_events,
     synthesize_pop_chip,
+    _apply_legato,
+    _apply_lowpass,
+    _bandlimited_waveform,
 )
 
 
-def generate_click_tone(freq, duration, sr, onset_times):
-    """生成在指定时刻出现纯音的测试音频。"""
-    t = np.arange(int(duration * sr)) / sr
+def test_synthesize_pop_chip_main_melody_only():
+    sr = 22050
+    duration = 1.0
+    t = np.arange(int(sr * duration)) / sr
     audio = np.zeros_like(t)
-    env_decay = 0.1
-    for ot in onset_times:
-        mask = (t >= ot) & (t < ot + env_decay)
-        env = np.exp(-(t[mask] - ot) / 0.03)
-        audio[mask] += np.sin(2 * np.pi * freq * t[mask]) * env
-    return audio
+    for start, freq in [(0.0, 261.63), (0.35, 329.63), (0.7, 392.0)]:
+        mask = (t >= start) & (t < start + 0.25)
+        audio[mask] += 0.3 * np.sin(2 * np.pi * freq * t[mask])
 
-
-def test_detect_onsets_finds_note_starts():
-    sr = 44100
-    onset_times = [0.2, 0.6, 1.0]
-    audio = generate_click_tone(440.0, 1.5, sr, onset_times)
-    onsets = _detect_onsets(audio, sr)
-    assert len(onsets) >= 3
-    for expected in onset_times:
-        assert any(np.abs(onsets - expected) < 0.03)
-
-
-def test_detect_onsets_silent_audio():
-    sr = 44100
-    silent_audio = np.zeros(sr * 2)
-    onsets = _detect_onsets(silent_audio, sr)
-    assert len(onsets) == 0
-
-
-def test_segment_audio_empty_onsets():
-    sr = 44100
-    audio = generate_click_tone(440.0, 1.0, sr, [0.0, 0.3, 0.7])
-    segments = _segment_audio(audio, sr, np.array([]), min_note_duration=0.05)
-    assert segments == [(0, len(audio))]
-
-
-def test_segment_audio_overlapping_onsets_deduplicated():
-    sr = 44100
-    audio = generate_click_tone(440.0, 1.0, sr, [0.0, 0.3, 0.7])
-    # Provide onsets closer than min_note_duration
-    dense_onsets = np.array([0.0, 0.01, 0.02, 0.3, 0.31, 0.7])
-    segments = _segment_audio(audio, sr, dense_onsets, min_note_duration=0.05)
-    # Should deduplicate and still produce valid segments
-    assert len(segments) >= 2
-    for start, end in segments:
-        assert 0 <= start < end <= len(audio)
-        assert (end - start) / sr >= 0.05
-
-
-def test_segment_audio_short_audio():
-    sr = 44100
-    # Audio shorter than min_note_duration
-    short_audio = np.zeros(int(sr * 0.01))
-    segments = _segment_audio(short_audio, sr, np.array([0.0]), min_note_duration=0.05)
-    assert segments == []
-
-
-def test_segment_audio_splits_by_onsets():
-    sr = 44100
-    onset_times = [0.0, 0.3, 0.7]
-    audio = generate_click_tone(440.0, 1.0, sr, onset_times)
-    segments = _segment_audio(audio, sr, onset_times, min_note_duration=0.05)
-    assert len(segments) >= 2
-    for start, end in segments:
-        assert 0 <= start < end <= len(audio)
-        assert (end - start) / sr >= 0.05
-
-
-def test_extract_stable_pitches_single_tone():
-    sr = 44100
-    duration = 0.3
-    freq = 440.0
-    t = np.arange(int(duration * sr)) / sr
-    segment = np.sin(2 * np.pi * freq * t) * 0.5
-    pitches = _extract_stable_pitches(segment, sr, n_voices=4, hop_length=512)
-    assert len(pitches) >= 1
-    midi, velocity = pitches[0]
-    assert abs(midi - 69) <= 1
-    assert 0 < velocity <= 127
-
-
-def test_extract_stable_pitches_two_tones():
-    sr = 44100
-    duration = 0.3
-    t = np.arange(int(duration * sr)) / sr
-    segment = (
-        np.sin(2 * np.pi * 440.0 * t) * 0.4
-        + np.sin(2 * np.pi * 659.25 * t) * 0.4
-    )
-    pitches = _extract_stable_pitches(segment, sr, n_voices=4, hop_length=512)
-    assert len(pitches) >= 2
-    midis = [p[0] for p in pitches[:2]]
-    assert any(abs(m - 69) <= 1 for m in midis)
-    assert any(abs(m - 76) <= 1 for m in midis)
+    out = synthesize_pop_chip(audio, sample_rate=sr, chip_mix=1.0, waveform='triangle')
+    assert out.shape[0] == 2
+    assert out.shape[1] > 0
+    assert out.dtype == np.float32
+    assert np.max(np.abs(out)) > 0.1
 
 
 def test_synthesize_pop_chip_outputs_stable_chip():
@@ -130,27 +49,6 @@ def test_synthesize_pop_chip_outputs_stable_chip():
     assert out.shape[1] == len(audio)
     assert out.dtype == np.float32
     assert np.max(np.abs(out)) <= 1.0
-
-
-def test_merge_consecutive_notes_joins_same_pitch():
-    notes = [
-        (69, 0.0, 0.3, 100),
-        (69, 0.32, 0.6, 100),
-        (72, 0.6, 0.9, 100),
-    ]
-    merged = _merge_consecutive_notes(notes, gap_threshold=0.05)
-    assert len(merged) == 2
-    assert merged[0] == (69, 0.0, 0.6, 100)
-    assert merged[1] == (72, 0.6, 0.9, 100)
-
-
-def test_merge_consecutive_notes_keeps_different_pitches():
-    notes = [
-        (69, 0.0, 0.3, 100),
-        (72, 0.32, 0.6, 100),
-    ]
-    merged = _merge_consecutive_notes(notes, gap_threshold=0.05)
-    assert len(merged) == 2
 
 
 def test_synthesize_events_shape_and_tail_silence():
@@ -183,3 +81,93 @@ def test_synthesize_events_pitch_stability():
     if estimated_period > 0:
         estimated_freq = 1.0 / estimated_period
         assert 420 <= estimated_freq <= 460
+
+
+def test_apply_legato_merges_close_notes():
+    notes = [
+        (60.0, 0.0, 0.45, 100),
+        (62.0, 0.48, 0.9, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert len(merged) == 2
+    assert merged[0][2] == 0.48  # first note extended to second onset
+
+
+def test_apply_legato_keeps_separated_notes():
+    notes = [
+        (60.0, 0.0, 0.3, 100),
+        (62.0, 0.5, 0.8, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert merged[0][2] == 0.3
+
+
+def test_apply_legato_skips_overlapping_notes():
+    notes = [
+        (60.0, 0.0, 0.5, 100),
+        (62.0, 0.45, 0.9, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert len(merged) == 2
+    assert merged[0][2] == 0.5  # first note not extended
+
+
+def test_apply_legato_keeps_max_velocity():
+    notes = [
+        (60.0, 0.0, 0.45, 80),
+        (62.0, 0.48, 0.9, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert merged[0][3] == 100
+
+
+def test_apply_legato_chains_multiple_notes():
+    notes = [
+        (60.0, 0.0, 0.25, 100),
+        (62.0, 0.28, 0.55, 100),
+        (64.0, 0.58, 0.85, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert len(merged) == 3
+    assert merged[0][2] == 0.28
+    assert merged[1][2] == 0.58
+
+
+def test_apply_lowpass_reduces_high_freq():
+    sr = 44100
+    t = np.arange(sr) / sr
+    audio = np.sin(2 * np.pi * 12000 * t)
+    filtered = _apply_lowpass(audio, sr, cutoff=8000)
+    assert np.max(np.abs(filtered)) <= np.max(np.abs(audio))
+    fft_in = np.abs(np.fft.rfft(audio))
+    fft_out = np.abs(np.fft.rfft(filtered))
+    # Compare energy in the stopband (above cutoff) relative to passband
+    cutoff_bin = int(8000 / (sr / len(fft_in)))
+    assert fft_out[cutoff_bin:].sum() < fft_in[cutoff_bin:].sum()
+
+
+def test_bandlimited_waveform_sine():
+    sr = 44100
+    freq = 440.0
+    t = np.arange(int(sr * 0.1)) / sr
+    phase = 2 * np.pi * freq * t
+    wave = _bandlimited_waveform(phase, freq, sr, 'sine')
+    np.testing.assert_allclose(wave, np.sin(phase), atol=1e-6)
+
+
+def test_synthesize_events_triangle_has_fewer_harmonics():
+    sr = 44100
+    notes = [(69, 0.0, 0.2, 100)]  # A4
+    square = _synthesize_events(notes, 0.2, sr, waveform='square')
+    triangle = _synthesize_events(notes, 0.2, sr, waveform='triangle')
+    fft_sq = np.abs(np.fft.rfft(square))
+    fft_tri = np.abs(np.fft.rfft(triangle))
+    assert fft_tri[2000:].sum() < fft_sq[2000:].sum()
+
+
+def test_synthesize_events_release_is_longer():
+    sr = 44100
+    notes = [(69, 0.0, 0.1, 100)]
+    audio = _synthesize_events(notes, 0.1, sr)
+    # With a longer release, amplitude should still be decaying near the end
+    assert abs(audio[-1]) < abs(audio[-int(0.020 * sr)])

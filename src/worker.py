@@ -25,6 +25,8 @@ class ConvertWorker(QThread):
         volume: int,
         output_format: str,
         mode: str = "fc",
+        waveform: str = "triangle",
+        chip_mix: float = 0.6,
     ):
         super().__init__()
         self.input_path = input_path
@@ -33,6 +35,10 @@ class ConvertWorker(QThread):
         self.volume = volume
         self.output_format = output_format
         self.mode = mode
+        self.waveform = waveform
+        if self.waveform not in {"square", "triangle", "sawtooth", "sine"}:
+            raise ValueError(f"Unsupported waveform: {self.waveform}")
+        self.chip_mix = max(0.0, min(1.0, chip_mix))
 
     def _load_audio_numpy(self, audio_segment):
         """将 pydub AudioSegment 转为 numpy 数组。"""
@@ -65,9 +71,8 @@ class ConvertWorker(QThread):
                 audio_data = synthesize_pop_chip(
                     audio_np,
                     sample_rate=audio.frame_rate,
-                    waveform="square",
-                    chip_mix=0.75,
-                    n_voices=6,
+                    waveform=self.waveform,
+                    chip_mix=self.chip_mix,
                 )
 
                 self.status.emit("正在导出文件...")

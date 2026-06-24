@@ -1,7 +1,27 @@
 import numpy as np
 import pytest
 
-from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line, _apply_hard_filters, _extract_main_melody, _extract_harmony_voice
+from src.pop_melody import _pyin_to_notes, _split_candidate_lines, _score_melody_line, _apply_hard_filters, _extract_main_melody, _extract_harmony_voice, _smooth_f0
+
+
+def test_score_melody_line_accepts_float_pitch():
+    line = [
+        (60.2, 0.0, 0.3, 100),
+        (62.1, 0.35, 0.6, 100),
+        (64.0, 0.65, 0.9, 100),
+    ]
+    score = _score_melody_line(line)
+    assert 0.0 <= score <= 1.0
+
+
+def test_hard_filters_accepts_float_pitch():
+    lines = [
+        [(60.0, 0.0, 0.05, 100), (62.0, 0.06, 0.11, 100)],
+        [(60.2, 0.0, 0.3, 100), (64.1, 0.35, 0.65, 100)],
+    ]
+    filtered = _apply_hard_filters(lines)
+    assert len(filtered) == 1
+    assert abs(filtered[0][0][0] - 60.2) < 0.01
 
 
 def generate_pure_tone(freq, duration, sr):
@@ -21,6 +41,16 @@ def test_pyin_to_notes_detects_single_tone():
     assert 1 <= velocity <= 127
 
 
+def test_pyin_to_notes_quantizes_to_semitones():
+    sr = 22050
+    duration = 0.5
+    t = np.linspace(0, duration, int(sr * duration))
+    audio = 0.3 * np.sin(2 * np.pi * 445.0 * t)
+    notes = _pyin_to_notes(audio, sr, hop_length=512, pitch_quantize_strength=1.0)
+    assert len(notes) >= 1
+    assert all(n[0] == 69 for n in notes)  # A4 = MIDI 69
+
+
 def test_pyin_to_notes_empty_audio():
     notes = _pyin_to_notes(np.array([], dtype=np.float64), 44100)
     assert notes == []
@@ -33,7 +63,29 @@ def test_pyin_to_notes_silence():
     assert notes == []
 
 
-def test_split_candidate_lines_separates_overlapping():
+def test_pyin_to_notes_partial_quantization_keeps_float_pitch():
+    sr = 22050
+    duration = 0.5
+    t = np.linspace(0, duration, int(sr * duration))
+    audio = 0.3 * np.sin(2 * np.pi * 445.0 * t)
+    notes = _pyin_to_notes(audio, sr, hop_length=512, pitch_quantize_strength=0.0)
+    assert len(notes) >= 1
+    # 445 Hz is slightly above A4 (440 Hz); without quantization pitch should be > 69
+    assert notes[0][0] > 69.0
+
+
+def test_pyin_to_notes_uses_f0_median_size():
+    sr = 22050
+    duration = 0.5
+    t = np.linspace(0, duration, int(sr * duration))
+    audio = 0.3 * np.sin(2 * np.pi * 440.0 * t)
+    notes_default = _pyin_to_notes(audio, sr, hop_length=512, f0_median_size=3)
+    notes_large = _pyin_to_notes(audio, sr, hop_length=512, f0_median_size=5)
+    assert len(notes_default) >= 1
+    assert len(notes_large) >= 1
+
+
+def test_split_candidate_lines_overlapping():
     notes = [
         (60, 0.0, 0.5, 100),  # 低音
         (72, 0.0, 0.5, 100),  # 高音，与低音重叠
@@ -169,4 +221,27 @@ def test_extract_harmony_voice_returns_consonant():
     assert len(harmony) == 1
     assert harmony[0][0] == 64
     assert harmony[0][3] == int(127 * 0.6)
+
+
+def test_smooth_f0_removes_single_frame_spike():
+    f0 = np.array([440.0, 441.0, 880.0, 439.0, 440.0])
+    voiced = np.array([True, True, True, True, True])
+    smoothed = _smooth_f0(f0, voiced, kernel_size=3)
+    assert smoothed[2] == 441.0
+    assert np.isfinite(smoothed[voiced]).all()
+
+
+def test_smooth_f0_keeps_unvoiced_nan():
+    f0 = np.array([440.0, np.nan, 880.0, np.nan, 440.0])
+    voiced = np.array([True, False, True, False, True])
+    smoothed = _smooth_f0(f0, voiced, kernel_size=3)
+    assert np.isnan(smoothed[1])
+    assert np.isnan(smoothed[3])
+
+
+def test_smooth_f0_coerces_even_kernel_size():
+    f0 = np.array([440.0, 441.0, 880.0, 439.0, 440.0])
+    voiced = np.array([True, True, True, True, True])
+    smoothed = _smooth_f0(f0, voiced, kernel_size=2)
+    assert smoothed[2] == 441.0
 

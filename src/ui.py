@@ -41,30 +41,6 @@ class MainWindow(QMainWindow):
         file_layout.addWidget(self.select_btn)
         layout.addLayout(file_layout)
 
-        # 复古纯度
-        layout.addWidget(QLabel("复古纯度"))
-        self.purity_slider = QSlider(Qt.Orientation.Horizontal)
-        self.purity_slider.setRange(0, 100)
-        self.purity_slider.setValue(0)
-        layout.addWidget(self.purity_slider)
-        purity_layout = QHBoxLayout()
-        purity_layout.addWidget(QLabel("纯 FC 方波"))
-        purity_layout.addStretch()
-        purity_layout.addWidget(QLabel("轻微润色"))
-        layout.addLayout(purity_layout)
-
-        # 音符简化强度
-        layout.addWidget(QLabel("音符简化强度"))
-        self.simplify_slider = QSlider(Qt.Orientation.Horizontal)
-        self.simplify_slider.setRange(0, 100)
-        self.simplify_slider.setValue(50)
-        layout.addWidget(self.simplify_slider)
-        simplify_layout = QHBoxLayout()
-        simplify_layout.addWidget(QLabel("保留原样"))
-        simplify_layout.addStretch()
-        simplify_layout.addWidget(QLabel("极致简化"))
-        layout.addLayout(simplify_layout)
-
         # 整体音量
         layout.addWidget(QLabel("整体音量"))
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
@@ -77,15 +53,27 @@ class MainWindow(QMainWindow):
         volume_layout.addWidget(QLabel("响"))
         layout.addLayout(volume_layout)
 
-        # 转换模式
-        mode_layout = QHBoxLayout()
-        mode_layout.addWidget(QLabel("转换风格"))
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["流行 8-bit", "纯正 FC"])
-        self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
-        mode_layout.addWidget(self.mode_combo)
-        mode_layout.addStretch()
-        layout.addLayout(mode_layout)
+        # 音色波形
+        waveform_layout = QHBoxLayout()
+        waveform_layout.addWidget(QLabel("芯片波形"))
+        self.waveform_combo = QComboBox()
+        self.waveform_combo.addItems(["三角波", "方波", "锯齿波", "正弦波"])
+        self.waveform_combo.setCurrentText("三角波")
+        waveform_layout.addWidget(self.waveform_combo)
+        waveform_layout.addStretch()
+        layout.addLayout(waveform_layout)
+
+        # 芯片混合比例
+        layout.addWidget(QLabel("芯片音色占比"))
+        self.chip_mix_slider = QSlider(Qt.Orientation.Horizontal)
+        self.chip_mix_slider.setRange(0, 100)
+        self.chip_mix_slider.setValue(60)
+        layout.addWidget(self.chip_mix_slider)
+        chip_mix_layout = QHBoxLayout()
+        chip_mix_layout.addWidget(QLabel("原声"))
+        chip_mix_layout.addStretch()
+        chip_mix_layout.addWidget(QLabel("芯片"))
+        layout.addLayout(chip_mix_layout)
 
         # 输出格式
         format_layout = QHBoxLayout()
@@ -119,12 +107,6 @@ class MainWindow(QMainWindow):
 
         self.output_path = ""
 
-    def _on_mode_changed(self, text: str):
-        is_fc = text == "纯正 FC"
-        self.purity_slider.setEnabled(is_fc)
-        self.simplify_slider.setEnabled(is_fc)
-        self.volume_slider.setEnabled(is_fc)
-
     def _select_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "选择 MP3 文件", "", "MP3 文件 (*.mp3)"
@@ -139,19 +121,32 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "请先选择 MP3 文件")
             return
 
+        if self.worker is not None and self.worker.isRunning():
+            return
+
         self.convert_btn.setEnabled(False)
         self.open_folder_btn.setEnabled(False)
         self.progress_bar.setValue(0)
 
-        mode = "pop" if self.mode_combo.currentText() == "流行 8-bit" else "fc"
+        waveform_map = {
+            "三角波": "triangle",
+            "方波": "square",
+            "锯齿波": "sawtooth",
+            "正弦波": "sine",
+        }
+        waveform = waveform_map.get(self.waveform_combo.currentText(), "triangle")
+        chip_mix = self.chip_mix_slider.value() / 100.0
 
+        # 复古纯度/音符简化强度仅用于已隐藏的 FC 模式，流行模式下固定为 0
         self.worker = ConvertWorker(
             input_path=self.input_path,
-            purity=self.purity_slider.value(),
-            simplification=self.simplify_slider.value(),
+            purity=0,
+            simplification=0,
             volume=self.volume_slider.value(),
             output_format=self.format_combo.currentText(),
-            mode=mode,
+            mode="pop",
+            waveform=waveform,
+            chip_mix=chip_mix,
         )
         self.worker.progress.connect(self.progress_bar.setValue)
         self.worker.status.connect(self.status_label.setText)
