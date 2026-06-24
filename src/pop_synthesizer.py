@@ -270,7 +270,7 @@ def _synthesize_events(
 def synthesize_pop_chip(
     audio: np.ndarray,
     sample_rate: int = 44100,
-    waveform: Literal['square', 'triangle', 'sawtooth'] = 'square',
+    waveform: Literal['square', 'triangle', 'sawtooth', 'sine'] = 'square',
     chip_mix: float = 0.75,
     n_voices: int = 4,
     hop_length: int = 512,
