@@ -258,3 +258,21 @@ def test_bandlimited_waveform_sine():
     phase = 2 * np.pi * freq * t
     wave = _bandlimited_waveform(phase, freq, sr, 'sine')
     np.testing.assert_allclose(wave, np.sin(phase), atol=1e-6)
+
+
+def test_synthesize_events_triangle_has_fewer_harmonics():
+    sr = 44100
+    notes = [(69, 0.0, 0.2, 100)]  # A4
+    square = _synthesize_events(notes, 0.2, sr, waveform='square')
+    triangle = _synthesize_events(notes, 0.2, sr, waveform='triangle')
+    fft_sq = np.abs(np.fft.rfft(square))
+    fft_tri = np.abs(np.fft.rfft(triangle))
+    assert fft_tri[2000:].sum() < fft_sq[2000:].sum()
+
+
+def test_synthesize_events_release_is_longer():
+    sr = 44100
+    notes = [(69, 0.0, 0.1, 100)]
+    audio = _synthesize_events(notes, 0.1, sr)
+    # With a longer release, amplitude should still be decaying near the end
+    assert abs(audio[-1]) < abs(audio[-int(0.020 * sr)])
