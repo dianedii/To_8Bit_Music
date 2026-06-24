@@ -8,6 +8,7 @@ from src.pop_synthesizer import (
     _merge_consecutive_notes,
     _synthesize_events,
     synthesize_pop_chip,
+    _apply_legato,
 )
 
 
@@ -183,3 +184,22 @@ def test_synthesize_events_pitch_stability():
     if estimated_period > 0:
         estimated_freq = 1.0 / estimated_period
         assert 420 <= estimated_freq <= 460
+
+
+def test_apply_legato_merges_close_notes():
+    notes = [
+        (60.0, 0.0, 0.45, 100),
+        (62.0, 0.48, 0.9, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert len(merged) == 2
+    assert merged[0][2] == 0.48  # first note extended to second onset
+
+
+def test_apply_legato_keeps_separated_notes():
+    notes = [
+        (60.0, 0.0, 0.3, 100),
+        (62.0, 0.5, 0.8, 100),
+    ]
+    merged = _apply_legato(notes, threshold=0.05)
+    assert merged[0][2] == 0.3

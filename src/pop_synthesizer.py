@@ -189,6 +189,25 @@ def _merge_consecutive_notes(
     return [tuple(n) for n in merged]
 
 
+def _apply_legato(
+    notes: list[tuple[float, float, float, int]],
+    threshold: float = 0.05,
+) -> list[tuple[float, float, float, int]]:
+    """合并间隔 ≤ threshold 的相邻音符，前一个音符延长到后一个 onset。"""
+    if not notes:
+        return []
+    notes = sorted(notes, key=lambda n: n[1])
+    merged = [list(notes[0])]
+    for pitch, onset, offset, velocity in notes[1:]:
+        prev = merged[-1]
+        gap = onset - prev[2]
+        if 0 <= gap <= threshold:
+            prev[2] = onset
+            prev[3] = max(prev[3], velocity)
+        merged.append([pitch, onset, offset, velocity])
+    return [tuple(n) for n in merged]
+
+
 def _synthesize_events(
     notes: list[tuple[int, float, float, int]],
     duration: float,
