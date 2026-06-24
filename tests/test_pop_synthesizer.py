@@ -2,10 +2,6 @@ import numpy as np
 import pytest
 
 from src.pop_synthesizer import (
-    _detect_onsets,
-    _segment_audio,
-    _extract_stable_pitches,
-    _merge_consecutive_notes,
     _synthesize_events,
     synthesize_pop_chip,
     _apply_legato,
@@ -26,88 +22,20 @@ def generate_click_tone(freq, duration, sr, onset_times):
     return audio
 
 
-def test_detect_onsets_finds_note_starts():
-    sr = 44100
-    onset_times = [0.2, 0.6, 1.0]
-    audio = generate_click_tone(440.0, 1.5, sr, onset_times)
-    onsets = _detect_onsets(audio, sr)
-    assert len(onsets) >= 3
-    for expected in onset_times:
-        assert any(np.abs(onsets - expected) < 0.03)
+def test_synthesize_pop_chip_main_melody_only():
+    sr = 22050
+    duration = 1.0
+    t = np.arange(int(sr * duration)) / sr
+    audio = np.zeros_like(t)
+    for start, freq in [(0.0, 261.63), (0.35, 329.63), (0.7, 392.0)]:
+        mask = (t >= start) & (t < start + 0.25)
+        audio[mask] += 0.3 * np.sin(2 * np.pi * freq * t[mask])
 
-
-def test_detect_onsets_silent_audio():
-    sr = 44100
-    silent_audio = np.zeros(sr * 2)
-    onsets = _detect_onsets(silent_audio, sr)
-    assert len(onsets) == 0
-
-
-def test_segment_audio_empty_onsets():
-    sr = 44100
-    audio = generate_click_tone(440.0, 1.0, sr, [0.0, 0.3, 0.7])
-    segments = _segment_audio(audio, sr, np.array([]), min_note_duration=0.05)
-    assert segments == [(0, len(audio))]
-
-
-def test_segment_audio_overlapping_onsets_deduplicated():
-    sr = 44100
-    audio = generate_click_tone(440.0, 1.0, sr, [0.0, 0.3, 0.7])
-    # Provide onsets closer than min_note_duration
-    dense_onsets = np.array([0.0, 0.01, 0.02, 0.3, 0.31, 0.7])
-    segments = _segment_audio(audio, sr, dense_onsets, min_note_duration=0.05)
-    # Should deduplicate and still produce valid segments
-    assert len(segments) >= 2
-    for start, end in segments:
-        assert 0 <= start < end <= len(audio)
-        assert (end - start) / sr >= 0.05
-
-
-def test_segment_audio_short_audio():
-    sr = 44100
-    # Audio shorter than min_note_duration
-    short_audio = np.zeros(int(sr * 0.01))
-    segments = _segment_audio(short_audio, sr, np.array([0.0]), min_note_duration=0.05)
-    assert segments == []
-
-
-def test_segment_audio_splits_by_onsets():
-    sr = 44100
-    onset_times = [0.0, 0.3, 0.7]
-    audio = generate_click_tone(440.0, 1.0, sr, onset_times)
-    segments = _segment_audio(audio, sr, onset_times, min_note_duration=0.05)
-    assert len(segments) >= 2
-    for start, end in segments:
-        assert 0 <= start < end <= len(audio)
-        assert (end - start) / sr >= 0.05
-
-
-def test_extract_stable_pitches_single_tone():
-    sr = 44100
-    duration = 0.3
-    freq = 440.0
-    t = np.arange(int(duration * sr)) / sr
-    segment = np.sin(2 * np.pi * freq * t) * 0.5
-    pitches = _extract_stable_pitches(segment, sr, n_voices=4, hop_length=512)
-    assert len(pitches) >= 1
-    midi, velocity = pitches[0]
-    assert abs(midi - 69) <= 1
-    assert 0 < velocity <= 127
-
-
-def test_extract_stable_pitches_two_tones():
-    sr = 44100
-    duration = 0.3
-    t = np.arange(int(duration * sr)) / sr
-    segment = (
-        np.sin(2 * np.pi * 440.0 * t) * 0.4
-        + np.sin(2 * np.pi * 659.25 * t) * 0.4
-    )
-    pitches = _extract_stable_pitches(segment, sr, n_voices=4, hop_length=512)
-    assert len(pitches) >= 2
-    midis = [p[0] for p in pitches[:2]]
-    assert any(abs(m - 69) <= 1 for m in midis)
-    assert any(abs(m - 76) <= 1 for m in midis)
+    out = synthesize_pop_chip(audio, sample_rate=sr, chip_mix=1.0, waveform='triangle')
+    assert out.shape[0] == 2
+    assert out.shape[1] > 0
+    assert out.dtype == np.float32
+    assert np.max(np.abs(out)) > 0.1
 
 
 def test_synthesize_pop_chip_outputs_stable_chip():
@@ -133,27 +61,6 @@ def test_synthesize_pop_chip_outputs_stable_chip():
     assert out.shape[1] == len(audio)
     assert out.dtype == np.float32
     assert np.max(np.abs(out)) <= 1.0
-
-
-def test_merge_consecutive_notes_joins_same_pitch():
-    notes = [
-        (69, 0.0, 0.3, 100),
-        (69, 0.32, 0.6, 100),
-        (72, 0.6, 0.9, 100),
-    ]
-    merged = _merge_consecutive_notes(notes, gap_threshold=0.05)
-    assert len(merged) == 2
-    assert merged[0] == (69, 0.0, 0.6, 100)
-    assert merged[1] == (72, 0.6, 0.9, 100)
-
-
-def test_merge_consecutive_notes_keeps_different_pitches():
-    notes = [
-        (69, 0.0, 0.3, 100),
-        (72, 0.32, 0.6, 100),
-    ]
-    merged = _merge_consecutive_notes(notes, gap_threshold=0.05)
-    assert len(merged) == 2
 
 
 def test_synthesize_events_shape_and_tail_silence():

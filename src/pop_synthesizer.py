@@ -15,48 +15,6 @@ from typing import Literal
 import librosa
 
 
-def _detect_onsets(audio: np.ndarray, sample_rate: int, hop_length: int = 512, wait: int = 3) -> np.ndarray:
-    """基于频谱通量检测音符起始点，返回秒级时间数组。"""
-    onset_frames = librosa.onset.onset_detect(
-        y=audio,
-        sr=sample_rate,
-        hop_length=hop_length,
-        wait=wait,
-        units='frames',
-    )
-    return librosa.frames_to_time(onset_frames, sr=sample_rate, hop_length=hop_length)
-
-
-def _segment_audio(
-    audio: np.ndarray,
-    sample_rate: int,
-    onsets: np.ndarray,
-    min_note_duration: float = 0.05,
-) -> list[tuple[int, int]]:
-    """按 onset 切分音频为样本索引片段，过滤过短片段。"""
-    if len(onsets) == 0:
-        return [(0, len(audio))]
-
-    sorted_onsets = np.sort(onsets)
-    merged = [sorted_onsets[0]]
-    for o in sorted_onsets[1:]:
-        if o - merged[-1] >= min_note_duration:
-            merged.append(o)
-        else:
-            pass
-
-    boundaries = [0] + list(merged) + [len(audio) / sample_rate]
-    segments = []
-    for i in range(len(boundaries) - 1):
-        start = int(boundaries[i] * sample_rate)
-        end = int(boundaries[i + 1] * sample_rate)
-        start = max(0, min(start, len(audio)))
-        end = max(0, min(end, len(audio)))
-        if end - start >= int(min_note_duration * sample_rate):
-            segments.append((start, end))
-    return segments
-
-
 def _audio_to_mono_float(audio: np.ndarray) -> np.ndarray:
     """将音频转为单声道 float64 [-1, 1]。"""
     if audio.ndim == 2:
@@ -91,7 +49,7 @@ def _gentle_compress(audio: np.ndarray, threshold: float = 0.6, ratio: float = 2
     return audio * gain
 
 
-def _midi_to_freq(midi_note: int) -> float:
+def _midi_to_freq(midi_note: float) -> float:
     return 440.0 * (2.0 ** ((midi_note - 69) / 12.0))
 
 
@@ -138,72 +96,6 @@ def _bandlimited_waveform(phase: np.ndarray, freq: float, sample_rate: int, wave
     return np.clip(wave, -1.0, 1.0)
 
 
-def _extract_stable_pitches(
-    segment: np.ndarray,
-    sample_rate: int,
-    n_voices: int = 4,
-    hop_length: int = 512,
-) -> list[tuple[int, int]]:
-    """从单一片段内提取稳定的 1~n_voices 个音高。"""
-    if len(segment) < hop_length:
-        return []
-
-    n_fft = min(2048, max(512, len(segment)))
-    stft = np.abs(librosa.stft(segment, n_fft=n_fft, hop_length=hop_length))
-    avg_spectrum = np.mean(stft, axis=1)
-    freqs = librosa.fft_frequencies(sr=sample_rate, n_fft=n_fft)
-
-    peaks, _ = signal.find_peaks(
-        avg_spectrum,
-        height=np.max(avg_spectrum) * 0.05,
-        distance=max(1, int(50 / (sample_rate / n_fft))),
-    )
-    if len(peaks) == 0:
-        return []
-
-    peak_infos = [(int(p), float(avg_spectrum[p])) for p in peaks if freqs[p] > 40.0]
-    peak_infos.sort(key=lambda x: x[1], reverse=True)
-    peak_infos = peak_infos[:n_voices]
-
-    rms = np.sqrt(np.mean(segment ** 2))
-    velocity = int(np.clip(rms * 127 * 4, 1, 127))
-
-    pitches = []
-    for peak_idx, amp in peak_infos:
-        freq = freqs[peak_idx]
-        midi_float = 69.0 + 12.0 * np.log2(freq / 440.0)
-        midi = int(np.round(np.clip(midi_float, 0, 127)))
-        pitches.append((midi, velocity))
-
-    seen = set()
-    unique = []
-    for midi, vel in pitches:
-        if midi not in seen:
-            seen.add(midi)
-            unique.append((midi, vel))
-    return unique
-
-
-def _merge_consecutive_notes(
-    notes: list[tuple[int, float, float, int]],
-    gap_threshold: float = 0.05,
-) -> list[tuple[int, float, float, int]]:
-    """合并相邻片段中相同音高的音符，避免重复 attack。"""
-    if not notes:
-        return []
-
-    notes = sorted(notes, key=lambda n: n[1])
-    merged = [list(notes[0])]
-    for pitch, onset, offset, velocity in notes[1:]:
-        prev = merged[-1]
-        if pitch == prev[0] and (onset - prev[2]) <= gap_threshold:
-            prev[2] = max(prev[2], offset)
-            prev[3] = max(prev[3], velocity)
-        else:
-            merged.append([pitch, onset, offset, velocity])
-    return [tuple(n) for n in merged]
-
-
 def _apply_legato(
     notes: list[tuple[float, float, float, int]],
     threshold: float = 0.05,
@@ -224,7 +116,7 @@ def _apply_legato(
 
 
 def _synthesize_events(
-    notes: list[tuple[int, float, float, int]],
+    notes: list[tuple[float, float, float, int]],
     duration: float,
     sample_rate: int,
     waveform: str = 'triangle',
@@ -264,66 +156,68 @@ def _synthesize_events(
 def synthesize_pop_chip(
     audio: np.ndarray,
     sample_rate: int = 44100,
-    waveform: Literal['square', 'triangle', 'sawtooth', 'sine'] = 'square',
-    chip_mix: float = 0.75,
-    n_voices: int = 4,
+    waveform: Literal['square', 'triangle', 'sawtooth', 'sine'] = 'triangle',
+    chip_mix: float = 0.6,
+    n_voices: int = 6,
     hop_length: int = 512,
     min_note_duration: float = 0.05,
-    pitch_stabilize: float = 1.0,
+    pitch_quantize_strength: float = 1.0,
+    f0_median_size: int = 3,
+    legato_threshold: float = 0.05,
+    lowpass_cutoff: float = 8000.0,
 ) -> np.ndarray:
     """
-    基于原音频的流行 8-bit 合成。
-
-    Args:
-        audio: 输入音频，numpy 数组（单声道/立体声，任意 dtype）
-        sample_rate: 采样率
-        waveform: 合成器波形
-        chip_mix: 合成器层混合比例（0~1）
-        n_voices: 同时跟踪的声部数
-        hop_length: STFT 帧移
-        min_note_duration: 最小音符时长（秒）
-        pitch_stabilize: 音高稳定因子（预留，暂未使用）
-
-    Returns:
-        合成后的立体声 float32 音频，shape (2, N)
+    基于主旋律提取的流行 8-bit 合成。
     """
+    from src.pop_melody import (
+        _pyin_to_notes,
+        _split_candidate_lines,
+        _apply_hard_filters,
+        _extract_main_melody,
+        _extract_harmony_voice,
+    )
+
     mono = _audio_to_mono_float(audio)
     if len(mono) == 0:
         return np.zeros((2, 0), dtype=np.float32)
 
-    onsets = _detect_onsets(mono, sample_rate, hop_length=hop_length)
-    segments = _segment_audio(mono, sample_rate, onsets, min_note_duration=min_note_duration)
+    notes = _pyin_to_notes(
+        mono,
+        sample_rate,
+        hop_length=hop_length,
+        min_note_duration=min_note_duration,
+        pitch_quantize_strength=pitch_quantize_strength,
+        f0_median_size=f0_median_size,
+    )
 
-    raw_notes = []
-    for start, end in segments:
-        segment = mono[start:end]
-        pitches = _extract_stable_pitches(segment, sample_rate, n_voices=n_voices, hop_length=hop_length)
-        onset_time = start / sample_rate
-        offset_time = end / sample_rate
-        for midi, velocity in pitches:
-            raw_notes.append((midi, onset_time, offset_time, velocity))
+    lines = _split_candidate_lines(notes)
+    lines = _apply_hard_filters(lines)
+    main_line = _extract_main_melody(lines)
 
-    notes = _merge_consecutive_notes(raw_notes, gap_threshold=min_note_duration)
+    other_lines = [line for line in lines if line is not main_line]
+    harmony = _extract_harmony_voice(main_line, other_lines, max_voices=1, volume_ratio=0.6)
+
+    main_legato = _apply_legato(main_line, threshold=legato_threshold)
+    events = sorted(main_legato + harmony, key=lambda n: n[1])
 
     duration = len(mono) / sample_rate
-    synth = _synthesize_events(notes, duration, sample_rate, waveform=waveform)
+    synth = _synthesize_events(events, duration, sample_rate, waveform=waveform)
 
-    # Peak normalize synth layer
+    if lowpass_cutoff > 0:
+        synth = _apply_lowpass(synth, sample_rate, cutoff=lowpass_cutoff)
+
     peak = np.max(np.abs(synth))
     if peak > 1e-9:
         synth = synth / peak * 0.98
 
-    # RMS envelope modulation
     envelope = _rms_envelope(mono, floor=0.50)
     envelope = np.cbrt(envelope)
     if len(envelope) == len(synth):
         synth = synth * envelope
 
-    # Mix original audio with chip synth layer
     out = (1.0 - chip_mix) * mono + chip_mix * synth
     out = out.astype(np.float64)
 
-    # Gentle compression + peak normalization
     out = _gentle_compress(out, threshold=0.55, ratio=2.5)
     peak = np.max(np.abs(out))
     if peak > 1e-9:
