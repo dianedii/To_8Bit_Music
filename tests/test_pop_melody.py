@@ -85,6 +85,7 @@ def test_pyin_to_notes_uses_f0_median_size():
     assert len(notes_large) >= 1
 
 
+def test_split_candidate_lines_overlapping():
     notes = [
         (60, 0.0, 0.5, 100),  # 低音
         (72, 0.0, 0.5, 100),  # 高音，与低音重叠

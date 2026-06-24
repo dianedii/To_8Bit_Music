@@ -110,7 +110,7 @@ def _split_candidate_lines(
         return []
 
     notes = sorted(notes, key=lambda n: n[1])
-    lines: list[list[tuple[int, float, float, int]]] = [[notes[0]]]
+    lines: list[list[tuple[float, float, float, int]]] = [[notes[0]]]
 
     for note in notes[1:]:
         onset = note[1]
