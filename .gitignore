@@ -9,3 +9,4 @@ __pycache__/
 !tests/fixtures/*.mp3
 !tests/fixtures/*.wav
 .superpowers/brainstorm/
+.worktrees/
