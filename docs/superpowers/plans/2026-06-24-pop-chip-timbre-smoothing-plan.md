@@ -324,7 +324,7 @@ def _apply_legato(
     notes: list[tuple[float, float, float, int]],
     threshold: float = 0.05,
 ) -> list[tuple[float, float, float, int]]:
-    """合并间隔 ≤ threshold 的相邻音符，前一个音符延长到后一个 onset。"""
+    """合并间隔 ≤ threshold 的相邻音符，前一个音符延长到后一个 onset，两者都保留。"""
     if not notes:
         return []
     notes = sorted(notes, key=lambda n: n[1])
@@ -335,8 +335,7 @@ def _apply_legato(
         if 0 <= gap <= threshold:
             prev[2] = onset
             prev[3] = max(prev[3], velocity)
-        else:
-            merged.append([pitch, onset, offset, velocity])
+        merged.append([pitch, onset, offset, velocity])
     return [tuple(n) for n in merged]
 ```
 
