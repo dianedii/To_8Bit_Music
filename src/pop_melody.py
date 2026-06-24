@@ -63,7 +63,7 @@ def _pyin_to_notes(
             return
         duration = end_time - start_time
         if duration >= min_note_duration:
-            notes.append((current_pitch, start_time, end_time, int(np.mean(velocities))))
+            notes.append((current_pitch, start_time, end_time, int(np.mean(velocities)) if velocities else 64))
         current_pitch = None
         velocities = []
 

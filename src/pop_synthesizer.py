@@ -168,6 +168,22 @@ def synthesize_pop_chip(
 ) -> np.ndarray:
     """
     基于主旋律提取的流行 8-bit 合成。
+
+    Args:
+        audio: 输入音频，numpy 数组（单声道/立体声，任意 dtype）
+        sample_rate: 采样率
+        waveform: 合成器波形
+        chip_mix: 合成器层混合比例（0~1）
+        n_voices: 和声点缀最大声部数
+        hop_length: STFT 帧移
+        min_note_duration: 最短音符时长（秒）
+        pitch_quantize_strength: 音高量化强度
+        f0_median_size: f0 中值滤波窗口
+        legato_threshold: 连音间隔阈值（秒）
+        lowpass_cutoff: 低通截止频率（Hz）
+
+    Returns:
+        合成后的立体声 float32 音频，shape (2, N)
     """
     from src.pop_melody import (
         _pyin_to_notes,
@@ -195,7 +211,7 @@ def synthesize_pop_chip(
     main_line = _extract_main_melody(lines)
 
     other_lines = [line for line in lines if line is not main_line]
-    harmony = _extract_harmony_voice(main_line, other_lines, max_voices=1, volume_ratio=0.6)
+    harmony = _extract_harmony_voice(main_line, other_lines, max_voices=n_voices, volume_ratio=0.6)
 
     main_legato = _apply_legato(main_line, threshold=legato_threshold)
     events = sorted(main_legato + harmony, key=lambda n: n[1])

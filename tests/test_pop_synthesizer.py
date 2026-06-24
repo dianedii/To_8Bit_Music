@@ -10,18 +10,6 @@ from src.pop_synthesizer import (
 )
 
 
-def generate_click_tone(freq, duration, sr, onset_times):
-    """生成在指定时刻出现纯音的测试音频。"""
-    t = np.arange(int(duration * sr)) / sr
-    audio = np.zeros_like(t)
-    env_decay = 0.1
-    for ot in onset_times:
-        mask = (t >= ot) & (t < ot + env_decay)
-        env = np.exp(-(t[mask] - ot) / 0.03)
-        audio[mask] += np.sin(2 * np.pi * freq * t[mask]) * env
-    return audio
-
-
 def test_synthesize_pop_chip_main_melody_only():
     sr = 22050
     duration = 1.0
