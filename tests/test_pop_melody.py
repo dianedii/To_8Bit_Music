@@ -21,6 +21,16 @@ def test_pyin_to_notes_detects_single_tone():
     assert 1 <= velocity <= 127
 
 
+def test_pyin_to_notes_quantizes_to_semitones():
+    sr = 22050
+    duration = 0.5
+    t = np.linspace(0, duration, int(sr * duration))
+    audio = 0.3 * np.sin(2 * np.pi * 445.0 * t)
+    notes = _pyin_to_notes(audio, sr, hop_length=512, pitch_quantize_strength=1.0)
+    assert len(notes) >= 1
+    assert all(n[0] == 69 for n in notes)  # A4 = MIDI 69
+
+
 def test_pyin_to_notes_empty_audio():
     notes = _pyin_to_notes(np.array([], dtype=np.float64), 44100)
     assert notes == []

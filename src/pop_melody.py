@@ -23,7 +23,9 @@ def _pyin_to_notes(
     sample_rate: int,
     hop_length: int = 512,
     min_note_duration: float = 0.05,
-) -> list[tuple[int, float, float, int]]:
+    pitch_quantize_strength: float = 1.0,
+    f0_median_size: int = 3,
+) -> list[tuple[float, float, float, int]]:
     """用 pYIN 将音频转为音符事件列表。
 
     返回 [(midi_pitch, onset_time, offset_time, velocity), ...]
@@ -35,6 +37,7 @@ def _pyin_to_notes(
         sr=sample_rate,
         hop_length=hop_length,
     )
+    f0 = _smooth_f0(f0, voiced_flag, kernel_size=f0_median_size)
     times = librosa.frames_to_time(np.arange(len(f0)), sr=sample_rate, hop_length=hop_length)
 
     notes = []
@@ -45,41 +48,44 @@ def _pyin_to_notes(
     start_time = None
     velocities = []
 
-    def _finalize_note():
+    def _finalize_note(end_time: float):
         nonlocal current_pitch, start_time, velocities
         if current_pitch is None:
             return
-        duration = times[i] - start_time
+        duration = end_time - start_time
         if duration >= min_note_duration:
-            notes.append((current_pitch, start_time, times[i], int(np.mean(velocities))))
+            notes.append((current_pitch, start_time, end_time, int(np.mean(velocities))))
         current_pitch = None
         velocities = []
 
     for i in range(len(f0)):
         if not voiced_flag[i] or np.isnan(f0[i]):
-            _finalize_note()
+            _finalize_note(times[i])
             continue
 
-        midi = int(np.round(librosa.hz_to_midi(f0[i])))
-        # 用 voiced_prob 作为置信度/力度代理；后续可结合 RMS 能量改进
-        vel = int(np.clip(voiced_prob[i] * 127, 1, 127))
+        midi_float = librosa.hz_to_midi(f0[i])
+        if pitch_quantize_strength >= 1.0:
+            midi = round(midi_float)
+        else:
+            quantized = round(midi_float)
+            midi = quantized + (1.0 - pitch_quantize_strength) * (midi_float - quantized)
+
+        vel = int(np.clip(voiced_prob[i] * 127, 1, 127)) if not np.isnan(voiced_prob[i]) else 64
 
         if current_pitch is None:
             current_pitch = midi
             start_time = times[i]
             velocities = [vel]
-        elif abs(midi - current_pitch) <= 1:
+        elif abs(midi - current_pitch) <= 0.5 * pitch_quantize_strength + 0.05:
             velocities.append(vel)
         else:
-            _finalize_note()
+            _finalize_note(times[i])
             current_pitch = midi
             start_time = times[i]
             velocities = [vel]
 
     if current_pitch is not None:
-        duration = times[-1] - start_time
-        if duration >= min_note_duration:
-            notes.append((current_pitch, start_time, times[-1], int(np.mean(velocities))))
+        _finalize_note(times[-1])
 
     return notes
 
