@@ -45,7 +45,7 @@ def test_pop_chip_end_to_end_synthetic():
         env = np.exp(-(t[mask] - start) / 0.05)
         audio[mask] += np.sin(2 * np.pi * freq * t[mask]) * env
 
-    out = synthesize_pop_chip(audio, sample_rate=sr, chip_mix=1.0, n_voices=4)
+    out = synthesize_pop_chip(audio, sample_rate=sr, chip_mix=1.0, waveform='triangle')
 
     with tempfile.TemporaryDirectory() as tmpdir:
         out_path = Path(tmpdir) / "out.wav"
