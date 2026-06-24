@@ -36,7 +36,9 @@ class ConvertWorker(QThread):
         self.output_format = output_format
         self.mode = mode
         self.waveform = waveform
-        self.chip_mix = chip_mix
+        if self.waveform not in {"square", "triangle", "sawtooth", "sine"}:
+            raise ValueError(f"Unsupported waveform: {self.waveform}")
+        self.chip_mix = max(0.0, min(1.0, chip_mix))
 
     def _load_audio_numpy(self, audio_segment):
         """将 pydub AudioSegment 转为 numpy 数组。"""
@@ -71,7 +73,6 @@ class ConvertWorker(QThread):
                     sample_rate=audio.frame_rate,
                     waveform=self.waveform,
                     chip_mix=self.chip_mix,
-                    n_voices=6,
                 )
 
                 self.status.emit("正在导出文件...")
