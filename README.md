@@ -72,6 +72,7 @@ PyQt6>=6.4.0
 piano_transcription_inference>=0.2
 numpy>=1.23.0
 scipy>=1.9.0
+librosa>=0.10.0
 pydub>=0.25.1
 ```
 
@@ -118,6 +119,7 @@ python main.py
 │   ├── note_simplifier.py       # 音符简化（FC 模式，已隐藏）
 │   ├── synthesizer.py           # FC 方波合成（已隐藏）
 │   ├── pop_synthesizer.py       # 流行 8-bit 多声部合成
+│   ├── pop_melody.py            # 主旋律提取与和声生成（流行 8-bit）
 │   └── utils.py                 # 依赖检测、音频导出、通用工具
 ├── tests/                       # 单元测试
 ├── docs/
