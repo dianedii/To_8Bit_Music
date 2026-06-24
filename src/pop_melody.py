@@ -28,7 +28,16 @@ def _pyin_to_notes(
 ) -> list[tuple[float, float, float, int]]:
     """用 pYIN 将音频转为音符事件列表。
 
+    Args:
+        audio: 单声道音频数组
+        sample_rate: 采样率
+        hop_length: STFT 帧移
+        min_note_duration: 最短音符时长（秒）
+        pitch_quantize_strength: 音高量化强度，1.0=完全量化到半音，0.0=保留原始 float MIDI
+        f0_median_size: f0 中值滤波窗口大小
+
     返回 [(midi_pitch, onset_time, offset_time, velocity), ...]
+    其中 midi_pitch 在 strength < 1.0 时可能为 float
     """
     f0, voiced_flag, voiced_prob = librosa.pyin(
         audio,

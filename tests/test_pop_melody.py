@@ -43,7 +43,28 @@ def test_pyin_to_notes_silence():
     assert notes == []
 
 
-def test_split_candidate_lines_separates_overlapping():
+def test_pyin_to_notes_partial_quantization_keeps_float_pitch():
+    sr = 22050
+    duration = 0.5
+    t = np.linspace(0, duration, int(sr * duration))
+    audio = 0.3 * np.sin(2 * np.pi * 445.0 * t)
+    notes = _pyin_to_notes(audio, sr, hop_length=512, pitch_quantize_strength=0.0)
+    assert len(notes) >= 1
+    # 445 Hz is slightly above A4 (440 Hz); without quantization pitch should be > 69
+    assert notes[0][0] > 69.0
+
+
+def test_pyin_to_notes_uses_f0_median_size():
+    sr = 22050
+    duration = 0.5
+    t = np.linspace(0, duration, int(sr * duration))
+    audio = 0.3 * np.sin(2 * np.pi * 440.0 * t)
+    notes_default = _pyin_to_notes(audio, sr, hop_length=512, f0_median_size=3)
+    notes_large = _pyin_to_notes(audio, sr, hop_length=512, f0_median_size=5)
+    assert len(notes_default) >= 1
+    assert len(notes_large) >= 1
+
+
     notes = [
         (60, 0.0, 0.5, 100),  # 低音
         (72, 0.0, 0.5, 100),  # 高音，与低音重叠
