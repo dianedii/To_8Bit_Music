@@ -45,7 +45,7 @@ def test_pop_chip_end_to_end_synthetic():
         env = np.exp(-(t[mask] - start) / 0.05)
         audio[mask] += np.sin(2 * np.pi * freq * t[mask]) * env
 
-    out = synthesize_pop_chip(audio, sample_rate=sr, chip_mix=0.6, waveform='triangle')
+    out = synthesize_pop_chip(audio, sample_rate=sr, volume=80)
     assert out.shape[0] == 2
     assert out.dtype == np.float32
     assert np.max(np.abs(out)) > 0

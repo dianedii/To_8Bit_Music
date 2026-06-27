@@ -53,28 +53,6 @@ class MainWindow(QMainWindow):
         volume_layout.addWidget(QLabel("响"))
         layout.addLayout(volume_layout)
 
-        # 音色波形
-        waveform_layout = QHBoxLayout()
-        waveform_layout.addWidget(QLabel("芯片波形"))
-        self.waveform_combo = QComboBox()
-        self.waveform_combo.addItems(["三角波", "方波", "锯齿波", "正弦波"])
-        self.waveform_combo.setCurrentText("三角波")
-        waveform_layout.addWidget(self.waveform_combo)
-        waveform_layout.addStretch()
-        layout.addLayout(waveform_layout)
-
-        # 芯片混合比例
-        layout.addWidget(QLabel("芯片音色占比"))
-        self.chip_mix_slider = QSlider(Qt.Orientation.Horizontal)
-        self.chip_mix_slider.setRange(0, 100)
-        self.chip_mix_slider.setValue(60)
-        layout.addWidget(self.chip_mix_slider)
-        chip_mix_layout = QHBoxLayout()
-        chip_mix_layout.addWidget(QLabel("原声"))
-        chip_mix_layout.addStretch()
-        chip_mix_layout.addWidget(QLabel("芯片"))
-        layout.addLayout(chip_mix_layout)
-
         # 输出格式
         format_layout = QHBoxLayout()
         format_layout.addWidget(QLabel("输出格式"))
@@ -109,7 +87,7 @@ class MainWindow(QMainWindow):
 
     def _select_file(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "选择 MP3 文件", "", "MP3 文件 (*.mp3)"
+            self, "选择音频文件", "", "音频文件 (*.mp3 *.mp4 *.m4v *.mov *.mkv)"
         )
         if path:
             self.input_path = path
@@ -128,15 +106,6 @@ class MainWindow(QMainWindow):
         self.open_folder_btn.setEnabled(False)
         self.progress_bar.setValue(0)
 
-        waveform_map = {
-            "三角波": "triangle",
-            "方波": "square",
-            "锯齿波": "sawtooth",
-            "正弦波": "sine",
-        }
-        waveform = waveform_map.get(self.waveform_combo.currentText(), "triangle")
-        chip_mix = self.chip_mix_slider.value() / 100.0
-
         # 复古纯度/音符简化强度仅用于已隐藏的 FC 模式，流行模式下固定为 0
         self.worker = ConvertWorker(
             input_path=self.input_path,
@@ -145,8 +114,6 @@ class MainWindow(QMainWindow):
             volume=self.volume_slider.value(),
             output_format=self.format_combo.currentText(),
             mode="pop",
-            waveform=waveform,
-            chip_mix=chip_mix,
         )
         self.worker.progress.connect(self.progress_bar.setValue)
         self.worker.status.connect(self.status_label.setText)

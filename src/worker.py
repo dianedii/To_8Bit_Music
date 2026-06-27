@@ -7,7 +7,7 @@ from src.transcriber import transcribe_to_notes
 from src.melody_extractor import extract_melody
 from src.note_simplifier import simplify_notes
 from src.synthesizer import synthesize
-from src.pop_synthesizer import synthesize_pop_chip
+from src.pop_synthesizer import synthesize_pop_chip, _synthesize_from_notes, _audio_to_mono_float
 from src.utils import export_audio, get_output_path
 
 
@@ -24,9 +24,7 @@ class ConvertWorker(QThread):
         simplification: int,
         volume: int,
         output_format: str,
-        mode: str = "fc",
-        waveform: str = "triangle",
-        chip_mix: float = 0.6,
+        mode: str = "pop",
     ):
         super().__init__()
         self.input_path = input_path
@@ -35,10 +33,6 @@ class ConvertWorker(QThread):
         self.volume = volume
         self.output_format = output_format
         self.mode = mode
-        self.waveform = waveform
-        if self.waveform not in {"square", "triangle", "sawtooth", "sine"}:
-            raise ValueError(f"Unsupported waveform: {self.waveform}")
-        self.chip_mix = max(0.0, min(1.0, chip_mix))
 
     def _load_audio_numpy(self, audio_segment):
         """将 pydub AudioSegment 转为 numpy 数组。"""
@@ -50,29 +44,57 @@ class ConvertWorker(QThread):
         max_val = float(2 ** (audio_segment.sample_width * 8 - 1))
         return samples.astype(np.float64) / max_val
 
+    def _ensure_audio_file(self) -> str:
+        """若输入是视频文件，先提取音频保存为 MP3，再返回可用的音频路径。"""
+        p = Path(self.input_path)
+        suffix = p.suffix.lower()
+        if suffix not in {".mp4", ".m4v", ".mov", ".mkv", ".avi", ".flv", ".webm"}:
+            return self.input_path
+
+        self.status.emit("检测到视频文件，正在提取音频为 MP3...")
+        from pydub import AudioSegment
+        audio = AudioSegment.from_file(str(p), format=suffix.lstrip("."))
+
+        mp3_path = p.with_suffix(".mp3")
+        counter = 1
+        base = p.stem
+        while mp3_path.exists():
+            mp3_path = p.with_name(f"{base}_{counter}.mp3")
+            counter += 1
+
+        audio.export(str(mp3_path), format="mp3", bitrate="192k")
+        return str(mp3_path)
+
     def run(self):
         try:
             self.status.emit("正在读取音频并检查时长...")
             self.progress.emit(5)
 
+            # 视频文件先转成 MP3
+            audio_path = self._ensure_audio_file()
+
             from pydub import AudioSegment
-            audio = AudioSegment.from_file(self.input_path)
+            audio = AudioSegment.from_file(audio_path)
             duration_sec = len(audio) / 1000.0
             if duration_sec > 600:
                 self.finished_error.emit("曲目时长超过 10 分钟限制。")
                 return
 
-            output_path = get_output_path(self.input_path, self.output_format)
+            output_path = get_output_path(audio_path, self.output_format)
 
             if self.mode == "pop":
+                self.status.emit("正在转录音符...")
+                self.progress.emit(30)
+                notes = transcribe_to_notes(self.input_path)
+
                 self.status.emit("正在合成流行 8-bit 音频...")
-                self.progress.emit(40)
+                self.progress.emit(60)
                 audio_np = self._load_audio_numpy(audio)
-                audio_data = synthesize_pop_chip(
-                    audio_np,
+                audio_data = _synthesize_from_notes(
+                    notes,
+                    _audio_to_mono_float(audio_np),
                     sample_rate=audio.frame_rate,
-                    waveform=self.waveform,
-                    chip_mix=self.chip_mix,
+                    volume=self.volume,
                 )
 
                 self.status.emit("正在导出文件...")

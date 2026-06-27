@@ -19,7 +19,7 @@ def test_synthesize_pop_chip_main_melody_only():
         mask = (t >= start) & (t < start + 0.25)
         audio[mask] += 0.3 * np.sin(2 * np.pi * freq * t[mask])
 
-    out = synthesize_pop_chip(audio, sample_rate=sr, chip_mix=1.0, waveform='triangle')
+    out = synthesize_pop_chip(audio, sample_rate=sr, volume=80)
     assert out.shape[0] == 2
     assert out.shape[1] > 0
     assert out.dtype == np.float32
@@ -39,10 +39,7 @@ def test_synthesize_pop_chip_outputs_stable_chip():
     out = synthesize_pop_chip(
         audio,
         sample_rate=sr,
-        waveform='square',
-        chip_mix=1.0,
-        n_voices=4,
-        hop_length=512,
+        volume=90,
     )
     assert out.ndim == 2
     assert out.shape[0] == 2
