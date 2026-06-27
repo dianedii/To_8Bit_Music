@@ -16,17 +16,17 @@ def test_is_package_installed_false():
 
 
 def test_get_output_path_mp3():
-    assert get_output_path("input.wav", "mp3") == Path("input.mp3")
+    assert get_output_path("input.wav", "mp3") == Path("goals/input.mp3")
 
 
 def test_get_output_path_wav():
-    assert get_output_path("input.mp3", "wav") == Path("input.wav")
+    assert get_output_path("input.mp3", "wav") == Path("goals/input.wav")
 
 
 def test_get_output_path_avoid_overwrite():
-    # 当输入输出格式相同时，应添加 _8bit 后缀避免覆盖原文件
-    assert get_output_path("input.mp3", "mp3") == Path("input_8bit.mp3")
-    assert get_output_path("input.wav", "wav") == Path("input_8bit.wav")
+    # 当输入文件就在 goals/ 且格式相同时，应添加 _8bit 后缀避免覆盖
+    assert get_output_path("goals/input.mp3", "mp3") == Path("goals/input_8bit.mp3")
+    assert get_output_path("goals/input.wav", "wav") == Path("goals/input_8bit.wav")
 
 
 def test_get_output_path_invalid_format():

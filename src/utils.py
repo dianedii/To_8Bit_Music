@@ -52,7 +52,7 @@ def install_packages(package_names: list[str], use_mirror: bool = True) -> None:
 
 
 def get_output_path(input_path: str, output_format: str) -> Path:
-    """根据输入文件和输出格式生成输出路径。"""
+    """根据输入文件和输出格式生成输出路径，固定输出到当前目录下的 goals/ 文件夹。"""
     p = Path(input_path)
     fmt = output_format.lower()
     if fmt == "wav":
@@ -62,10 +62,16 @@ def get_output_path(input_path: str, output_format: str) -> Path:
     else:
         raise ValueError(f"不支持的输出格式: {output_format}")
 
-    # 避免输出文件与输入文件同名导致覆盖
-    if p.suffix.lower() == suffix:
-        return p.with_stem(f"{p.stem}_8bit").with_suffix(suffix)
-    return p.with_suffix(suffix)
+    goals_dir = Path("goals")
+    goals_dir.mkdir(parents=True, exist_ok=True)
+
+    # 固定输出到当前目录下的 goals/ 文件夹
+    out_path = goals_dir / f"{p.stem}{suffix}"
+
+    # 避免输出文件与输入文件同名导致覆盖（例如输入就是 goals/xxx.mp3）
+    if p.resolve() == out_path.resolve():
+        out_path = goals_dir / f"{p.stem}_8bit{suffix}"
+    return out_path
 
 
 def open_folder(path: Path) -> None:
