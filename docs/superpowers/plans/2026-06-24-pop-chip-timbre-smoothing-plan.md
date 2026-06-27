@@ -1,5 +1,7 @@
 # 流行 8-bit 音色柔化与音高定位优化实现计划
 
+> **状态：** 本文档为历史计划。实际实现已根据用户参考样例重新设计，移除了波形/chip_mix 控件，改用 `piano_transcription_inference` + 多层方波/三角波合成，并新增视频输入支持。详见 `2026-06-24-pop-chip-timbre-smoothing-design.md` 第 7 节与更新后的 `README.md`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让流行 8-bit 输出更丝滑、主旋律音高定位更准确，同时从 UI 隐藏 FC 模式。
