@@ -87,6 +87,12 @@ class ConvertWorker(QThread):
                 self.progress.emit(30)
                 notes = transcribe_to_notes(self.input_path)
 
+                self.status.emit("正在提取主旋律...")
+                self.progress.emit(45)
+                melody = extract_melody(notes)
+                if not melody:
+                    melody = None
+
                 self.status.emit("正在合成流行 8-bit 音频...")
                 self.progress.emit(60)
                 audio_np = self._load_audio_numpy(audio)
@@ -95,6 +101,7 @@ class ConvertWorker(QThread):
                     _audio_to_mono_float(audio_np),
                     sample_rate=audio.frame_rate,
                     volume=self.volume,
+                    melody_notes=melody,
                 )
 
                 self.status.emit("正在导出文件...")

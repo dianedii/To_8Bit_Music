@@ -212,8 +212,18 @@ def _synthesize_from_notes(
     mono: np.ndarray,
     sample_rate: int,
     volume: int = 80,
+    melody_notes: list[tuple[int, float, float, int]] | None = None,
 ) -> np.ndarray:
-    """从已提取的音符事件列表出发，按音高分层合成目标样例风格 8-bit。"""
+    """从已提取的音符事件列表出发，按音高分层合成目标样例风格 8-bit。
+
+    Args:
+        notes: 所有转录出的音符事件。
+        mono: 原曲单声道音频，用于鼓点提取。
+        sample_rate: 采样率。
+        volume: 输出音量 0~100。
+        melody_notes: 可选的主旋律线。提供时，旋律音无论音高都会获得带亮度层的
+            主旋处理；其余音符作为背景伴奏。为 None 时保持旧的按音高分层行为。
+    """
     duration = len(mono) / sample_rate
 
     if not notes:
@@ -230,29 +240,97 @@ def _synthesize_from_notes(
     # 清理：过滤弱音 + 限制最大音符长度，避免踏板/延音造成持续嗡嗡
     max_note_duration = 0.8
     min_velocity = 35
-    notes = [
-        (p, t0, min(t1, t0 + max_note_duration), max(v, min_velocity))
-        for p, t0, t1, v in notes
-        if v >= min_velocity
-    ]
 
-    # 按音高分层：低音贝斯 / 中音主旋 / 高音点缀
-    bass_notes = [(p, t0, t1, v) for p, t0, t1, v in notes if p < 50]
-    lead_notes = [(p, t0, t1, v) for p, t0, t1, v in notes if 50 <= p < 75]
-    high_notes = [(p, t0, t1, min(127, int(v * 0.55))) for p, t0, t1, v in notes if p >= 75]
+    def _clean(note_list: list[tuple[int, float, float, int]]) -> list[tuple[int, float, float, int]]:
+        return [
+            (p, t0, min(t1, t0 + max_note_duration), max(v, min_velocity))
+            for p, t0, t1, v in note_list
+            if v >= min_velocity
+        ]
 
-    # 给中音主旋增加高八度亮度层，弥补 pyin 等提取方法常偏低音的问题
-    lead_high = [(min(127, p + 12), t0, t1, min(127, int(v * 0.45))) for p, t0, t1, v in lead_notes]
-    lead_higher = [(min(127, p + 24), t0, t1, min(127, int(v * 0.20))) for p, t0, t1, v in lead_notes]
+    cleaned_notes = _clean(notes)
+    cleaned_melody = _clean(melody_notes) if melody_notes else []
 
-    # 各层用不同 decay：低音允许稍长，中高音短促干净
-    synth_bass = _synthesize_layer(bass_notes, duration, sample_rate, waveform='triangle', amp_scale=0.9, decay_s=0.50)
-    synth_lead = _synthesize_layer(lead_notes, duration, sample_rate, waveform='square', amp_scale=0.9, decay_s=0.25)
-    synth_lead_high = _synthesize_layer(lead_high, duration, sample_rate, waveform='square', amp_scale=0.5, decay_s=0.20)
-    synth_lead_higher = _synthesize_layer(lead_higher, duration, sample_rate, waveform='square', amp_scale=0.22, decay_s=0.15)
-    synth_high = _synthesize_layer(high_notes, duration, sample_rate, waveform='square', amp_scale=0.45, decay_s=0.15)
+    # 区分旋律与伴奏：用 (pitch, onset) 匹配，offset 可能在清理时被截断
+    melody_set = {(p, t0) for p, t0, _, _ in cleaned_melody}
+    melody = [n for n in cleaned_notes if (n[0], n[1]) in melody_set]
+    accompaniment = [n for n in cleaned_notes if (n[0], n[1]) not in melody_set]
 
-    synth = synth_bass * 0.75 + synth_lead + synth_lead_high * 0.8 + synth_lead_higher * 0.5 + synth_high * 0.6
+    if melody:
+        # ---- 旋律优先：主旋律无论音高都获得带八度层的 lead 处理 ----
+        # 伴奏层保持与旧版接近的音量，但被排除在外的旋律音不再重复出现
+        accomp_bass = [(p, t0, t1, v) for p, t0, t1, v in accompaniment if p < 50]
+        accomp_lead = [(p, t0, t1, v) for p, t0, t1, v in accompaniment if 50 <= p < 75]
+        accomp_high = [(p, t0, t1, min(127, int(v * 0.55))) for p, t0, t1, v in accompaniment if p >= 75]
+
+        accomp_lead_high = [(min(127, p + 12), t0, t1, min(127, int(v * 0.45))) for p, t0, t1, v in accomp_lead]
+        accomp_lead_higher = [(min(127, p + 24), t0, t1, min(127, int(v * 0.20))) for p, t0, t1, v in accomp_lead]
+
+        melody_low = [(p, t0, t1, v) for p, t0, t1, v in melody if p < 50]
+        melody_mid = [(p, t0, t1, v) for p, t0, t1, v in melody if 50 <= p < 75]
+        melody_high = [(p, t0, t1, v) for p, t0, t1, v in melody if p >= 75]
+
+        def _octave_layers(src: list[tuple[int, float, float, int]], v_high: float, v_higher: float):
+            high = [(min(127, p + 12), t0, t1, min(127, int(v * v_high))) for p, t0, t1, v in src]
+            higher = [(min(127, p + 24), t0, t1, min(127, int(v * v_higher))) for p, t0, t1, v in src]
+            return high, higher
+
+        melody_low_high, melody_low_higher = _octave_layers(melody_low, 0.45, 0.20)
+        melody_mid_high, melody_mid_higher = _octave_layers(melody_mid, 0.45, 0.20)
+        melody_high_high, melody_high_higher = _octave_layers(melody_high, 0.45, 0.20)
+
+        # 伴奏层：保持原配比
+        synth_bass = _synthesize_layer(accomp_bass, duration, sample_rate, waveform='triangle', amp_scale=0.9, decay_s=0.50)
+        synth_accomp_lead = _synthesize_layer(accomp_lead, duration, sample_rate, waveform='square', amp_scale=0.9, decay_s=0.25)
+        synth_accomp_lead_high = _synthesize_layer(accomp_lead_high, duration, sample_rate, waveform='square', amp_scale=0.5, decay_s=0.20)
+        synth_accomp_lead_higher = _synthesize_layer(accomp_lead_higher, duration, sample_rate, waveform='square', amp_scale=0.22, decay_s=0.15)
+        synth_accomp_high = _synthesize_layer(accomp_high, duration, sample_rate, waveform='square', amp_scale=0.45, decay_s=0.15)
+
+        # 旋律层：统一按 lead 处理，高音也能获得八度亮度层
+        synth_melody_low = _synthesize_layer(melody_low, duration, sample_rate, waveform='square', amp_scale=0.9, decay_s=0.25)
+        synth_melody_low_high = _synthesize_layer(melody_low_high, duration, sample_rate, waveform='square', amp_scale=0.5, decay_s=0.20)
+        synth_melody_low_higher = _synthesize_layer(melody_low_higher, duration, sample_rate, waveform='square', amp_scale=0.22, decay_s=0.15)
+
+        synth_melody_mid = _synthesize_layer(melody_mid, duration, sample_rate, waveform='square', amp_scale=0.9, decay_s=0.25)
+        synth_melody_mid_high = _synthesize_layer(melody_mid_high, duration, sample_rate, waveform='square', amp_scale=0.5, decay_s=0.20)
+        synth_melody_mid_higher = _synthesize_layer(melody_mid_higher, duration, sample_rate, waveform='square', amp_scale=0.22, decay_s=0.15)
+
+        synth_melody_high = _synthesize_layer(melody_high, duration, sample_rate, waveform='square', amp_scale=0.9, decay_s=0.25)
+        synth_melody_high_high = _synthesize_layer(melody_high_high, duration, sample_rate, waveform='square', amp_scale=0.5, decay_s=0.20)
+        synth_melody_high_higher = _synthesize_layer(melody_high_higher, duration, sample_rate, waveform='square', amp_scale=0.22, decay_s=0.15)
+
+        synth = (
+            synth_bass * 0.75
+            + synth_accomp_lead
+            + synth_accomp_lead_high * 0.8
+            + synth_accomp_lead_higher * 0.5
+            + synth_accomp_high * 0.6
+            + synth_melody_low
+            + synth_melody_low_high * 0.8
+            + synth_melody_low_higher * 0.5
+            + synth_melody_mid
+            + synth_melody_mid_high * 0.8
+            + synth_melody_mid_higher * 0.5
+            + synth_melody_high
+            + synth_melody_high_high * 0.8
+            + synth_melody_high_higher * 0.5
+        )
+    else:
+        # 无主旋信息时退回到旧行为，保持兼容
+        bass_notes = [(p, t0, t1, v) for p, t0, t1, v in cleaned_notes if p < 50]
+        lead_notes = [(p, t0, t1, v) for p, t0, t1, v in cleaned_notes if 50 <= p < 75]
+        high_notes = [(p, t0, t1, min(127, int(v * 0.55))) for p, t0, t1, v in cleaned_notes if p >= 75]
+
+        lead_high = [(min(127, p + 12), t0, t1, min(127, int(v * 0.45))) for p, t0, t1, v in lead_notes]
+        lead_higher = [(min(127, p + 24), t0, t1, min(127, int(v * 0.20))) for p, t0, t1, v in lead_notes]
+
+        synth_bass = _synthesize_layer(bass_notes, duration, sample_rate, waveform='triangle', amp_scale=0.9, decay_s=0.50)
+        synth_lead = _synthesize_layer(lead_notes, duration, sample_rate, waveform='square', amp_scale=0.9, decay_s=0.25)
+        synth_lead_high = _synthesize_layer(lead_high, duration, sample_rate, waveform='square', amp_scale=0.5, decay_s=0.20)
+        synth_lead_higher = _synthesize_layer(lead_higher, duration, sample_rate, waveform='square', amp_scale=0.22, decay_s=0.15)
+        synth_high = _synthesize_layer(high_notes, duration, sample_rate, waveform='square', amp_scale=0.45, decay_s=0.15)
+
+        synth = synth_bass * 0.75 + synth_lead + synth_lead_high * 0.8 + synth_lead_higher * 0.5 + synth_high * 0.6
 
     synth = _add_8bit_drums(synth, mono, sample_rate, strength=0.20)
     synth = _shape_bus(synth, sample_rate, highpass_hz=120.0)

@@ -46,7 +46,16 @@ def test_extract_melody_filters_invalid_duration():
     assert melody[1] == (72, 1.0, 1.5, 80)  # only valid note in second window
 
 
-def test_extract_melody_preserves_full_tuple():
+def test_extract_melody_high_register_not_flattened():
+    # 高潮处持续高音不应被略长的中音压平
+    notes = [
+        (76, 0.0, 2.5, 80),  # 中音，较长
+        (84, 0.0, 2.1, 85),  # 高音，略短但更高，应被选中
+    ]
+    melody = extract_melody(notes)
+    # 主旋律应以高音 84 开头，而不是被中音 76 压平
+    assert melody[0][0] == 84
+
     notes = [
         (60, 0.0, 0.4, 80),
         (72, 0.0, 0.4, 90),  # 同时结束的高音，应被完整保留
