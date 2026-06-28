@@ -4,6 +4,7 @@ import pytest
 from src.pop_synthesizer import (
     _synthesize_events,
     synthesize_pop_chip,
+    _synthesize_from_notes,
     _apply_legato,
     _apply_lowpass,
     _bandlimited_waveform,
@@ -160,6 +161,70 @@ def test_synthesize_events_triangle_has_fewer_harmonics():
     fft_sq = np.abs(np.fft.rfft(square))
     fft_tri = np.abs(np.fft.rfft(triangle))
     assert fft_tri[2000:].sum() < fft_sq[2000:].sum()
+
+
+def test_synthesize_from_notes_backward_compatible_without_melody():
+    """未提供 melody_notes 时保持旧的按音高分层行为。"""
+    sr = 44100
+    duration = 0.5
+    notes = [
+        (60, 0.0, 0.2, 100),
+        (72, 0.25, 0.45, 100),
+    ]
+    mono = np.zeros(int(duration * sr), dtype=np.float64)
+
+    out = _synthesize_from_notes(notes, mono, sr, volume=80)
+    assert out.shape == (2, int(duration * sr))
+    assert out.dtype == np.float32
+    assert np.max(np.abs(out)) > 0
+
+
+def test_synthesize_from_notes_melody_high_notes_get_lead_treatment():
+    """高音主旋律（MIDI 76+）在提供 melody_notes 时应获得 richer 的 lead 处理。"""
+    sr = 44100
+    duration = 1.0
+    notes = [
+        (48, 0.0, 0.5, 80),    # C3 伴奏
+        (52, 0.0, 0.5, 75),    # E3 伴奏
+        (55, 0.0, 0.5, 70),    # G3 伴奏
+        (64, 0.0, 0.3, 90),    # E4 伴奏
+        (76, 0.0, 0.4, 100),   # E5 旋律
+        (79, 0.5, 0.9, 100),   # G5 旋律
+        (84, 1.0, 1.4, 100),   # C6 旋律
+    ]
+    melody = [
+        (76, 0.0, 0.4, 100),
+        (79, 0.5, 0.9, 100),
+        (84, 1.0, 1.4, 100),
+    ]
+    mono = np.zeros(int(duration * sr), dtype=np.float64)
+
+    out_with = _synthesize_from_notes(notes, mono, sr, volume=80, melody_notes=melody)
+    out_without = _synthesize_from_notes(notes, mono, sr, volume=80, melody_notes=None)
+
+    assert out_with.shape == (2, len(mono))
+    assert out_without.shape == (2, len(mono))
+
+    rms_with = np.sqrt(np.mean(out_with ** 2))
+    rms_without = np.sqrt(np.mean(out_without ** 2))
+    # 旋律感知版本因为有额外的八度层，能量应明显更高
+    assert rms_with > rms_without * 1.1
+
+
+def test_synthesize_from_notes_melody_note_deduplication():
+    """旋律音不应在伴奏层中被重复计算。"""
+    sr = 44100
+    duration = 0.5
+    notes = [
+        (60, 0.0, 0.3, 100),
+        (72, 0.2, 0.5, 100),
+    ]
+    melody = [(60, 0.0, 0.3, 100)]
+    mono = np.zeros(int(duration * sr), dtype=np.float64)
+
+    out = _synthesize_from_notes(notes, mono, sr, melody_notes=melody)
+    assert out.shape == (2, len(mono))
+    assert np.max(np.abs(out)) > 0
 
 
 def test_synthesize_events_release_is_longer():
